@@ -1,0 +1,21 @@
+# Core
+requests>=2.31.0
+httpx>=0.27.0
+beautifulsoup4>=4.12.0
+pyyaml>=6.0.1
+pydantic>=2.5.0
+
+# Embeddings
+sentence-transformers>=2.2.0
+
+# Groq
+groq>=0.4.0
+
+# Search
+googlesearch-python>=1.2.0
+
+# Email
+# (uses standard library smtplib)
+
+# Dev
+python-dotenv>=1.0.0

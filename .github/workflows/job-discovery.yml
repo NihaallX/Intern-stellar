@@ -1,0 +1,83 @@
+name: AI Job Discovery
+
+on:
+  schedule:
+    # Run twice weekly: Monday and Thursday at 9:00 AM UTC
+    - cron: '0 9 * * 1,4'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (preview email without sending)'
+        required: false
+        default: 'false'
+        type: boolean
+      skip_dedup:
+        description: 'Skip deduplication (include previously seen jobs)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  discover-jobs:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Restore job cache
+        uses: actions/cache@v4
+        with:
+          path: data/seen_jobs.json
+          key: seen-jobs-${{ github.run_number }}
+          restore-keys: |
+            seen-jobs-
+      
+      - name: Run job discovery pipeline
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SMTP_EMAIL: ${{ secrets.SMTP_EMAIL }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: |
+          # Build command with optional flags
+          CMD="python -m src.main"
+          
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            CMD="$CMD --dry-run"
+          fi
+          
+          if [ "${{ github.event.inputs.skip_dedup }}" == "true" ]; then
+            CMD="$CMD --skip-dedup"
+          fi
+          
+          echo "Running: $CMD"
+          $CMD
+      
+      - name: Save job cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data/seen_jobs.json
+          key: seen-jobs-${{ github.run_number }}
+      
+      - name: Upload logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-logs
+          path: |
+            data/
+          retention-days: 7

@@ -1,0 +1,64 @@
+# Candidate Profile (Ground Truth)
+# This is the canonical reference for relevance scoring.
+
+name: "AI Systems Engineer Candidate"
+
+summary: |
+  Applied GenAI / AI Systems–oriented early-career engineer.
+  Strong in production LLM systems, RAG, agentic workflows.
+  Experience with voice AI, FastAPI backends, AWS Lambda, cloud-native deployment.
+  Startup internship experience, shipped real systems, latency optimization.
+  Not a research-first or PhD-track ML profile.
+
+# Core skills to prioritize (high weight)
+priority_skills:
+  - LLM
+  - RAG
+  - agents
+  - LangGraph
+  - LangChain
+  - FastAPI
+  - AWS Lambda
+  - API Gateway
+  - SES
+  - SNS
+  - voice AI
+  - conversational AI
+
+# Secondary skills (medium weight)
+secondary_skills:
+  - Python
+  - Docker
+  - Kubernetes
+  - Redis
+  - PostgreSQL
+  - WebSockets
+  - real-time systems
+
+# De-prioritize / Penalize
+deprioritize:
+  - PhD required
+  - research publications required
+  - CV-heavy
+  - computer vision specialist
+  - unpaid
+  - on-site only
+
+# Target role types
+target_roles:
+  - AI Engineer
+  - Applied AI Engineer
+  - GenAI Engineer
+  - LLM Engineer
+  - AI Systems Engineer
+  - Machine Learning Engineer  # if applied/production-focused
+  - Backend Engineer  # if AI-adjacent
+
+# Experience level
+experience_level: "intern_or_junior"  # intern, junior, 0-2 years
+
+# Location preferences
+location:
+  remote_preferred: true
+  hybrid_acceptable: true
+  onsite_only_acceptable: false

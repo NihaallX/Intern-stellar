@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+
+# Data
+data/seen_jobs.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+check_groq.py

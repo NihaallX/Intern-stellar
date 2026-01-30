@@ -1,0 +1,64 @@
+# Pipeline Settings
+
+# Scoring thresholds
+scoring:
+  minimum_score: 40
+  top_n_jobs: 20
+
+# Scoring weights (must sum to 100)
+weights:
+  semantic_similarity: 40  # 0-40 points
+  skill_match: 25          # 0-25 points
+  experience_fit: 15       # 0-15 points
+  company_signal: 10       # 0-10 points
+  penalties: 10            # -10 to +10 points
+
+# X-Ray Search configuration
+xray:
+  # ATS platforms to search
+  sites:
+    - greenhouse.io
+    - lever.co
+    - ashbyhq.com
+    - workable.com
+    - breezy.hr
+    - recruitee.com
+    - jobs.lever.co
+    - boards.greenhouse.io
+    - wellfound.com/jobs
+  
+  # Search keywords (combined with sites)
+  keywords:
+    - "AI Engineer"
+    - "GenAI Engineer"
+    - "LLM Engineer"
+    - "Applied AI"
+    - "Machine Learning Engineer intern"
+    - "AI intern"
+    - "Generative AI"
+    - "RAG"
+    - "agentic"
+  
+  # Max results per query
+  max_results_per_query: 20
+
+# Hacker News scraper
+hackernews:
+  enabled: true
+  # Search for the latest "Who's Hiring" thread
+
+# Email configuration
+email:
+  recipient: "nihalpardeshi12344@gmail.com"
+  subject_prefix: "[AI Jobs]"
+
+# LLM configuration (Groq)
+llm:
+  model: "llama-3.3-70b-versatile"
+  temperature: 0  # Deterministic
+  max_tokens: 2000
+
+# Deduplication
+dedup:
+  # Store seen job IDs in this file
+  cache_file: "data/seen_jobs.json"

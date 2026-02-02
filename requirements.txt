@@ -13,6 +13,7 @@ groq>=0.4.0
 
 # Search
 googlesearch-python>=1.2.0
+tavily-python>=0.3.0
 
 # Email
 # (uses standard library smtplib)

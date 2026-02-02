@@ -26,6 +26,23 @@ def format_job_entry(job: Job, rank: int) -> str:
     lines.append(f"    Location: {job.location} {'(Remote)' if job.remote else ''}")
     lines.append(f"    Score: {job.score:.1f}/100")
     
+    # Company enrichment (if available)
+    if job.company_enrichment:
+        enrich = job.company_enrichment
+        enrichment_parts = []
+        
+        if enrich.employee_count:
+            enrichment_parts.append(f"{enrich.employee_count} employees")
+        if enrich.funding_stage:
+            enrichment_parts.append(enrich.funding_stage)
+        if enrich.is_ai_company:
+            enrichment_parts.append("AI-native ✓")
+        if enrich.glassdoor_rating:
+            enrichment_parts.append(f"Glassdoor: {enrich.glassdoor_rating}/5")
+        
+        if enrichment_parts:
+            lines.append(f"    Company info: {', '.join(enrichment_parts)}")
+    
     # Score breakdown
     if job.score_breakdown:
         bd = job.score_breakdown

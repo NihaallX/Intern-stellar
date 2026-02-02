@@ -56,6 +56,9 @@ class Job(BaseModel):
     # LLM-extracted flags (populated by parser)
     extracted_flags: Optional["ExtractedFlags"] = None
     
+    # Web-enriched company data (populated by web search)
+    company_enrichment: Optional["CompanyEnrichment"] = None
+    
     # Scoring results (populated by scoring engine)
     score: Optional[float] = None
     score_breakdown: Optional["ScoreBreakdown"] = None
@@ -69,6 +72,18 @@ class Job(BaseModel):
         import hashlib
         content = f"{self.url}|{self.title}|{self.company}"
         return hashlib.md5(content.encode()).hexdigest()[:16]
+
+
+class CompanyEnrichment(BaseModel):
+    """Company information enriched from web search."""
+    employee_count: Optional[int] = None
+    funding_stage: Optional[str] = None  # seed, series A, B, C, etc.
+    is_ai_company: bool = False
+    recent_news: list[str] = Field(default_factory=list)
+    tech_stack: list[str] = Field(default_factory=list)
+    company_description: Optional[str] = None
+    glassdoor_rating: Optional[float] = None
+    verified_remote_policy: Optional[str] = None  # remote-first, hybrid, onsite
 
 
 class ExtractedFlags(BaseModel):
@@ -151,6 +166,7 @@ class PipelineSettings(BaseModel):
     weights: dict = Field(default_factory=dict)
     xray: dict = Field(default_factory=dict)
     hackernews: dict = Field(default_factory=dict)
+    tavily: dict = Field(default_factory=dict)
     email: dict = Field(default_factory=dict)
     llm: dict = Field(default_factory=dict)
     dedup: dict = Field(default_factory=dict)

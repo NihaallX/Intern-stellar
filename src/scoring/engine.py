@@ -144,14 +144,49 @@ def compute_experience_fit(flags: ExtractedFlags) -> tuple[float, list[str]]:
     return score, reasons
 
 
-def compute_company_signal(flags: ExtractedFlags) -> tuple[float, list[str]]:
+def compute_company_signal(flags: ExtractedFlags, enrichment=None) -> tuple[float, list[str]]:
     """
     Compute company signal score.
     Returns (score, reasons) where score is in range 0-10.
+    
+    Now enhanced with web-enriched company data.
     """
     score = 0.0
     reasons = []
     
+    # Use enrichment data if available (more reliable)
+    if enrichment:
+        # Employee count scoring
+        if enrichment.employee_count:
+            if enrichment.employee_count < 200:
+                score = 10
+                reasons.append(f"Startup ({enrichment.employee_count} employees)")
+            elif enrichment.employee_count < 2000:
+                score = 7
+                reasons.append(f"Mid-size ({enrichment.employee_count} employees)")
+            else:
+                score = 4
+                reasons.append(f"Enterprise ({enrichment.employee_count}+ employees)")
+        
+        # AI-native company bonus
+        if enrichment.is_ai_company:
+            score = min(score + 3, 10)
+            reasons.append("AI-native company (verified)")
+        
+        # Funding stage bonus (indicates growth)
+        if enrichment.funding_stage:
+            if enrichment.funding_stage.lower() in ["seed", "series a", "series b"]:
+                score = min(score + 1, 10)
+                reasons.append(f"{enrichment.funding_stage} stage")
+        
+        # Glassdoor rating bonus
+        if enrichment.glassdoor_rating and enrichment.glassdoor_rating >= 4.0:
+            score = min(score + 1, 10)
+            reasons.append(f"High Glassdoor rating ({enrichment.glassdoor_rating})")
+        
+        return score, reasons
+    
+    # Fallback to LLM-extracted flags (less reliable)
     if flags.company_type == CompanyType.STARTUP:
         score = 10
         reasons.append("AI-native startup")
@@ -249,8 +284,11 @@ def score_job(job: Job) -> Job:
     if exp_score >= 10:
         why_matched.extend(exp_reasons[:1])
     
-    # 4. Company signal
-    company_score, company_reasons = compute_company_signal(flags)
+    # 4. Company signal (now with enrichment support)
+    company_score, company_reasons = compute_company_signal(
+        flags, 
+        enrichment=job.company_enrichment
+    )
     if company_score >= 7:
         why_matched.extend(company_reasons[:1])
     

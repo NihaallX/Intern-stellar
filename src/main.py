@@ -21,6 +21,7 @@ from src.scoring.engine import apply_hard_filters, score_job, rank_jobs
 from src.emailer import send_email
 from src.utils.dedup import filter_new_jobs
 from src.utils.config import load_settings
+from src.utils.web_search import search_company_info, clear_cache, get_api_call_count
 
 
 def run_pipeline(
@@ -115,6 +116,48 @@ def run_pipeline(
     if not filtered_jobs:
         print("  No jobs passed filters. Exiting.")
         return []
+    
+    # =========================================
+    # STEP 4.5: Company Enrichment (Web Search)
+    # =========================================
+    tavily_settings = settings.tavily if hasattr(settings, 'tavily') and isinstance(settings.tavily, dict) else {}
+    if tavily_settings.get("enabled", False) and tavily_settings.get("enrich_companies", True):
+        max_enrich = tavily_settings.get("max_enrichment_jobs", 30)
+        jobs_to_enrich = filtered_jobs[:max_enrich]
+        
+        print(f"\n[STEP 4.5] Enriching companies via web search ({len(jobs_to_enrich)} jobs)...")
+        print(f"  Rate limiting: 1.5s between API calls (be nice to Tavily)")
+        
+        # Clear cache at start of enrichment
+        clear_cache()
+        
+        enriched_count = 0
+        failed_count = 0
+        cached_count = 0
+        
+        for i, job in enumerate(jobs_to_enrich):
+            try:
+                enrichment = search_company_info(job.company)
+                if enrichment and (enrichment.employee_count or enrichment.is_ai_company):
+                    job.company_enrichment = enrichment
+                    enriched_count += 1
+                
+                if (i + 1) % 5 == 0:
+                    print(f"  Progress: {i + 1}/{len(jobs_to_enrich)} companies processed")
+            except Exception as e:
+                failed_count += 1
+                print(f"  ERROR: Failed to enrich {job.company}: {e}")
+        
+        print(f"  ✓ Successfully enriched {enriched_count}/{len(jobs_to_enrich)} companies")
+        if failed_count > 0:
+            print(f"  ⚠ {failed_count} enrichment(s) failed (using fallback data)")
+        
+        # Report API usage
+        api_calls = get_api_call_count()
+        print(f"  📊 API calls used: {api_calls} (cache saved {len(jobs_to_enrich) - api_calls} calls)")
+        print(f"  💰 Credits used: ~{api_calls} (1000/month free tier)")
+    else:
+        print("\n[STEP 4.5] Company enrichment disabled (set tavily.enabled=true to enable)")
     
     # =========================================
     # STEP 5: Scoring (deterministic)

@@ -32,6 +32,19 @@ def get_groq_api_key() -> str:
     return key
 
 
+def get_tavily_api_key() -> str:
+    """Get Tavily API key from environment or config."""
+    load_env()
+    key = os.getenv("TAVILY_API_KEY")
+    if not key:
+        # Fallback to hardcoded key from settings
+        settings = load_settings()
+        key = settings.tavily.get("api_key") if hasattr(settings, 'tavily') and isinstance(settings.tavily, dict) else None
+    if not key:
+        raise ValueError("TAVILY_API_KEY not found in environment or settings")
+    return key
+
+
 def get_smtp_credentials() -> tuple[str, str]:
     """Get SMTP email and password from environment."""
     load_env()

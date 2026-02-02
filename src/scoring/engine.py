@@ -348,9 +348,27 @@ def apply_hard_filters(job: Job) -> bool:
         print(f"[FILTER] Discarding PhD-required: {job.title}")
         return False
     
-    # Hard discard senior roles
+    # Hard discard senior roles (check LLM flags first)
     if flags.experience_level in [ExperienceLevel.SENIOR, ExperienceLevel.LEAD]:
         print(f"[FILTER] Discarding senior role: {job.title}")
+        return False
+    
+    # DOUBLE-CHECK: Catch experience patterns LLM might have missed
+    # This is critical because LLM sometimes returns "unknown" for roles with clear requirements
+    combined_text = f"{job.title} {job.description}".lower()
+    
+    import re
+    # Pattern for "X+ years", "X-Y years", "X years+"
+    years_pattern = r'\b([3-9]|[1-9][0-9])\+?\s*years|\b([3-9]|[1-9][0-9])\s*-\s*\d+\s*years'
+    if re.search(years_pattern, combined_text):
+        print(f"[FILTER] Discarding mid/senior role (requires 3+ years): {job.title}")
+        return False
+    
+    # Catch senior titles that LLM missed
+    senior_keywords = ['staff engineer', 'staff software', 'principal engineer', 'lead engineer', 
+                       'senior engineer', 'sr. engineer', 'sr engineer']
+    if any(keyword in combined_text for keyword in senior_keywords):
+        print(f"[FILTER] Discarding senior role (title keyword): {job.title}")
         return False
     
     # CRITICAL: Require AI/ML/LLM keywords in description or title
@@ -363,7 +381,6 @@ def apply_hard_filters(job: Job) -> bool:
         'vector database', 'nlp', 'natural language'
     ]
     
-    combined_text = f"{job.title} {job.description}".lower()
     has_ai_keyword = any(keyword in combined_text for keyword in ai_keywords)
     
     # Also check if job has actual AI flags set

@@ -133,7 +133,6 @@ def run_pipeline(
         
         enriched_count = 0
         failed_count = 0
-        cached_count = 0
         
         for i, job in enumerate(jobs_to_enrich):
             try:

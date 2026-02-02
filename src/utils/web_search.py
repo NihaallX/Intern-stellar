@@ -154,8 +154,7 @@ def search_company_info(company_name: str) -> CompanyEnrichment:
                 enrichment.recent_news.append(result["title"])
         
         # Search for tech stack
-        try:
-            tech_query = f"{company_name} engineering blog tech stack Python AWS React"
+        try:            _rate_limit()  # Rate limit tech stack search too            tech_query = f"{company_name} engineering blog tech stack Python AWS React"
             tech_response = client.search(
                 query=tech_query,
                 search_depth="basic",

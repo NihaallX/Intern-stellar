@@ -2,8 +2,10 @@ name: AI Job Discovery
 
 on:
   schedule:
-    # Run twice weekly: Monday and Thursday at 9:00 AM UTC
+    # Run twice weekly: Monday and Thursday at 9:00 AM UTC (2:30 PM IST)
     - cron: '0 9 * * 1,4'
+    # Backup run at 2:00 PM UTC (7:30 PM IST) in case first run is delayed
+    - cron: '0 14 * * 1,4'
   
   # Allow manual trigger
   workflow_dispatch:

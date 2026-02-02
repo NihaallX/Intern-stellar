@@ -2,8 +2,8 @@
 
 # Scoring thresholds
 scoring:
-  minimum_score: 40
-  top_n_jobs: 20
+  minimum_score: 35  # Lowered from 40 to capture more opportunities
+  top_n_jobs: 30
 
 # Scoring weights (must sum to 100)
 weights:
@@ -26,6 +26,11 @@ xray:
     - jobs.lever.co
     - boards.greenhouse.io
     - wellfound.com/jobs
+    - apply.workable.com
+    - smartrecruiters.com
+    - jobvite.com
+    - careers-page.com
+    - bamboohr.com
   
   # Search keywords (combined with sites)
   keywords:
@@ -38,9 +43,13 @@ xray:
     - "Generative AI"
     - "RAG"
     - "agentic"
+    - "Applied ML"
+    - "AI Systems"
+    - "LLM Systems"
+    - "Prompt Engineering"
   
   # Max results per query
-  max_results_per_query: 20
+  max_results_per_query: 30  # More results per query
 
 # Hacker News scraper
 hackernews:
@@ -52,7 +61,7 @@ tavily:
   api_key: ""  # Set via TAVILY_API_KEY environment variable
   enabled: true
   enrich_companies: true  # Enable company enrichment via web search
-  max_enrichment_jobs: 30  # Only enrich top N jobs to save API calls
+  max_enrichment_jobs: 80  # Increased from 30 (~160 credits/run, 1280/month < 1000 free tier)
 
 # Email configuration
 email:

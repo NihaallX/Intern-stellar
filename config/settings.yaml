@@ -49,7 +49,7 @@ hackernews:
 
 # Tavily Web Search configuration
 tavily:
-  api_key: "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"
+  api_key: ""  # Set via TAVILY_API_KEY environment variable
   enabled: true
   enrich_companies: true  # Enable company enrichment via web search
   max_enrichment_jobs: 30  # Only enrich top N jobs to save API calls

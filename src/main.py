@@ -65,13 +65,13 @@ def run_pipeline(
         except Exception as e:
             print(f"  - HN: Error - {e}")
     
-    # X-Ray Search
-    try:
-        xray_jobs = scrape_xray(max_jobs=max_jobs_per_source)
-        all_jobs.extend(xray_jobs)
-        print(f"  - X-Ray: {len(xray_jobs)} jobs")
-    except Exception as e:
-        print(f"  - X-Ray: Error - {e}")
+    # X-Ray Search (disabled for testing - gets rate limited)
+    # try:
+    #     xray_jobs = scrape_xray(max_jobs=max_jobs_per_source)
+    #     all_jobs.extend(xray_jobs)
+    #     print(f"  - X-Ray: {len(xray_jobs)} jobs")
+    # except Exception as e:
+    #     print(f"  - X-Ray: Error - {e}")
     
     print(f"  Total scraped: {len(all_jobs)} jobs")
     

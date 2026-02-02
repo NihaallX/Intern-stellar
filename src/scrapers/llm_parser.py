@@ -175,14 +175,14 @@ def extract_flags_fallback(job: Job) -> ExtractedFlags:
         is_onsite_only="on-site only" in text or "no remote" in text,
     )
     
-    # Experience level detection
+    # Experience level detection (improved to catch more patterns)
     if "intern" in text:
         flags.experience_level = ExperienceLevel.INTERN
-    elif "junior" in text or "0-2 years" in text or "entry level" in text:
+    elif "junior" in text or "0-2 years" in text or "entry level" in text or "entry-level" in text:
         flags.experience_level = ExperienceLevel.JUNIOR
-    elif "senior" in text or "5+ years" in text:
+    elif any(pattern in text for pattern in ["senior", "sr.", "staff", "principal", "lead", "5+ years", "5-7 years", "6+ years", "7+ years"]):
         flags.experience_level = ExperienceLevel.SENIOR
-    elif "3-5 years" in text or "mid-level" in text:
+    elif any(pattern in text for pattern in ["3+ years", "3-5 years", "4+ years", "2-4 years", "mid-level", "mid level"]):
         flags.experience_level = ExperienceLevel.MID
     
     # Company type from text cues

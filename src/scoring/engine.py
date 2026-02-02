@@ -69,38 +69,37 @@ def compute_skill_match(flags: ExtractedFlags) -> tuple[float, list[str]]:
     score = 0.0
     reasons = []
     
-    # Priority skills (high points)
+    # Priority AI/ML skills (high points) - ONLY AI-specific now
     if flags.has_llm:
-        score += 5
+        score += 7  # Increased from 5
         reasons.append("LLM experience")
     
     if flags.has_rag:
-        score += 5
+        score += 6  # Increased from 5
         reasons.append("RAG systems")
     
     if flags.has_agents:
-        score += 4
+        score += 6  # Increased from 4
         reasons.append("Agentic workflows")
     
     if flags.has_langchain or flags.has_langgraph:
-        score += 3
+        score += 4  # Increased from 3
         reasons.append("LangChain/LangGraph")
-    
-    if flags.has_fastapi:
-        score += 3
-        reasons.append("FastAPI expertise")
-    
-    if flags.has_aws:
-        score += 3
-        reasons.append("AWS infrastructure")
     
     if flags.has_voice_ai:
         score += 4
         reasons.append("Voice AI experience")
     
-    if flags.has_backend:
-        score += 2
-        reasons.append("Backend systems")
+    # Secondary AI/ML skills
+    if flags.has_fastapi:
+        score += 2  # Reduced from 3 (common in fullstack)
+        reasons.append("FastAPI")
+    
+    if flags.has_aws:
+        score += 2  # Reduced from 3 (common in devops)
+        reasons.append("AWS")
+    
+    # REMOVED: has_backend (too generic, matches all software jobs)
     
     # Cap at 25
     return min(score, 25), reasons
@@ -241,6 +240,24 @@ def compute_penalties(job: Job, flags: ExtractedFlags) -> tuple[float, list[str]
         adjustment -= 3
         reasons.append("On-site only")
     
+    # NEW: Penalize non-AI engineering roles
+    title_lower = job.title.lower()
+    if any(keyword in title_lower for keyword in ["fullstack", "full stack", "full-stack"]):
+        adjustment -= 5
+        reasons.append("Fullstack role (not AI-focused)")
+    
+    if any(keyword in title_lower for keyword in ["mobile", "react native", "ios", "android", "flutter"]):
+        adjustment -= 6
+        reasons.append("Mobile role (not AI-focused)")
+    
+    if any(keyword in title_lower for keyword in ["devops", "sre", "infrastructure", "platform engineer"]):
+        adjustment -= 5
+        reasons.append("DevOps role (not AI-focused)")
+    
+    if any(keyword in title_lower for keyword in ["frontend", "front-end", "ui engineer"]):
+        adjustment -= 6
+        reasons.append("Frontend role (not AI-focused)")
+    
     # Bonuses
     if job.remote:
         adjustment += 3
@@ -334,6 +351,29 @@ def apply_hard_filters(job: Job) -> bool:
     # Hard discard senior roles
     if flags.experience_level in [ExperienceLevel.SENIOR, ExperienceLevel.LEAD]:
         print(f"[FILTER] Discarding senior role: {job.title}")
+        return False
+    
+    # CRITICAL: Require AI/ML/LLM keywords in description or title
+    # This prevents generic fullstack/backend roles from passing
+    ai_keywords = [
+        'llm', 'large language model', 'gpt', 'genai', 'generative ai',
+        'rag', 'retrieval augmented', 'agentic', 'agent', 'langchain',
+        'machine learning', 'ml engineer', 'ai engineer', 'applied ai',
+        'transformer', 'embedding', 'prompt engineering', 'fine-tuning',
+        'vector database', 'nlp', 'natural language'
+    ]
+    
+    combined_text = f"{job.title} {job.description}".lower()
+    has_ai_keyword = any(keyword in combined_text for keyword in ai_keywords)
+    
+    # Also check if job has actual AI flags set
+    has_ai_flags = (
+        flags.has_llm or flags.has_rag or flags.has_agents or 
+        flags.has_langchain or flags.has_langgraph
+    )
+    
+    if not has_ai_keyword and not has_ai_flags:
+        print(f"[FILTER] Discarding non-AI role: {job.title}")
         return False
     
     return True

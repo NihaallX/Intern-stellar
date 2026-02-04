@@ -15,7 +15,10 @@ from datetime import datetime
 
 from src.models import Job
 from src.scrapers.hackernews import scrape_hackernews
-from src.scrapers.xray import scrape_xray
+from src.scrapers.ycombinator import scrape_ycombinator_jobs
+from src.scrapers.remotive import scrape_remotive_jobs
+from src.scrapers.wellfound import scrape_wellfound_jobs
+from src.scrapers.huggingface import scrape_huggingface_jobs
 from src.scrapers.llm_parser import parse_job_with_llm
 from src.scoring.engine import apply_hard_filters, score_job, rank_jobs
 from src.emailer import send_email
@@ -65,13 +68,41 @@ def run_pipeline(
         except Exception as e:
             print(f"  - HN: Error - {e}")
     
-    # X-Ray Search (disabled for testing - gets rate limited)
-    # try:
-    #     xray_jobs = scrape_xray(max_jobs=max_jobs_per_source)
-    #     all_jobs.extend(xray_jobs)
-    #     print(f"  - X-Ray: {len(xray_jobs)} jobs")
-    # except Exception as e:
-    #     print(f"  - X-Ray: Error - {e}")
+    # YC Work at a Startup
+    if settings.ycombinator.get("enabled", True):
+        try:
+            yc_jobs = scrape_ycombinator_jobs(max_results=settings.ycombinator.get("max_results", 30))
+            all_jobs.extend(yc_jobs)
+            print(f"  - YC: {len(yc_jobs)} jobs")
+        except Exception as e:
+            print(f"  - YC: Error - {e}")
+    
+    # Remotive AI/ML
+    if settings.remotive.get("enabled", True):
+        try:
+            remotive_jobs = scrape_remotive_jobs(max_results=settings.remotive.get("max_results", 30))
+            all_jobs.extend(remotive_jobs)
+            print(f"  - Remotive: {len(remotive_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Remotive: Error - {e}")
+    
+    # Wellfound (AngelList)
+    if settings.wellfound.get("enabled", True):
+        try:
+            wellfound_jobs = scrape_wellfound_jobs(max_results=settings.wellfound.get("max_results", 30))
+            all_jobs.extend(wellfound_jobs)
+            print(f"  - Wellfound: {len(wellfound_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Wellfound: Error - {e}")
+    
+    # Hugging Face
+    if settings.huggingface.get("enabled", True):
+        try:
+            hf_jobs = scrape_huggingface_jobs(max_results=settings.huggingface.get("max_results", 20))
+            all_jobs.extend(hf_jobs)
+            print(f"  - Hugging Face: {len(hf_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Hugging Face: Error - {e}")
     
     print(f"  Total scraped: {len(all_jobs)} jobs")
     

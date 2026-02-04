@@ -396,7 +396,8 @@ def apply_hard_filters(job: Job) -> bool:
         'rag', 'retrieval augmented', 'agentic', 'agent', 'langchain',
         'machine learning', 'ml engineer', 'ai engineer', 'applied ai',
         'transformer', 'embedding', 'prompt engineering', 'fine-tuning',
-        'vector database', 'nlp', 'natural language'
+        'vector database', 'nlp', 'natural language',
+        'ai product manager', 'product manager ai', 'ai pm', 'product management ai'
     ]
     
     has_ai_keyword = any(keyword in combined_text for keyword in ai_keywords)

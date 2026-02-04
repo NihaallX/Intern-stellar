@@ -13,48 +13,30 @@ weights:
   company_signal: 10       # 0-10 points
   penalties: 10            # -10 to +10 points
 
-# X-Ray Search configuration
-xray:
-  # ATS platforms to search
-  sites:
-    - greenhouse.io
-    - lever.co
-    - ashbyhq.com
-    - workable.com
-    - breezy.hr
-    - recruitee.com
-    - jobs.lever.co
-    - boards.greenhouse.io
-    - wellfound.com/jobs
-    - apply.workable.com
-    - smartrecruiters.com
-    - jobvite.com
-    - careers-page.com
-    - bamboohr.com
-  
-  # Search keywords (combined with sites)
-  keywords:
-    - "AI Engineer"
-    - "GenAI Engineer"
-    - "LLM Engineer"
-    - "Applied AI"
-    - "Machine Learning Engineer intern"
-    - "AI intern"
-    - "Generative AI"
-    - "RAG"
-    - "agentic"
-    - "Applied ML"
-    - "AI Systems"
-    - "LLM Systems"
-    - "Prompt Engineering"
-  
-  # Max results per query
-  max_results_per_query: 30  # More results per query
-
 # Hacker News scraper
 hackernews:
   enabled: true
   # Search for the latest "Who's Hiring" thread
+
+# YC Work at a Startup scraper
+ycombinator:
+  enabled: true
+  max_results: 30  # YC has lots of AI startups
+
+# Remotive AI/ML Jobs scraper
+remotive:
+  enabled: true
+  max_results: 30  # Remote AI/ML specific
+
+# Wellfound (AngelList) scraper
+wellfound:
+  enabled: true
+  max_results: 30  # Startup job board
+
+# Hugging Face Jobs scraper
+huggingface:
+  enabled: true
+  max_results: 20  # AI/ML focused job board
 
 # Tavily Web Search configuration
 tavily:

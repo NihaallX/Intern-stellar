@@ -74,13 +74,24 @@ def extract_flags_with_llm(job: Job) -> Optional[ExtractedFlags]:
     The LLM does NOT score - it only extracts boolean/enum flags.
     """
     try:
+        import os
         settings = load_settings()
         api_key = get_groq_api_key()
         
-        # Initialize Groq client with minimal parameters to avoid proxy issues
-        import os
-        os.environ["GROQ_API_KEY"] = api_key
-        client = Groq()
+        # Remove any proxy environment variables that might interfere
+        proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']
+        old_proxies = {}
+        for var in proxy_vars:
+            if var in os.environ:
+                old_proxies[var] = os.environ[var]
+                del os.environ[var]
+        
+        # Initialize Groq client with explicit API key
+        client = Groq(api_key=api_key)
+        
+        # Restore proxy vars
+        for var, value in old_proxies.items():
+            os.environ[var] = value
         
         # Build the prompt
         user_prompt = f"""Parse this job posting:
@@ -196,20 +207,25 @@ def extract_flags_fallback(job: Job) -> ExtractedFlags:
     return flags
 
 
-def parse_job_with_llm(job: Job, use_fallback: bool = True) -> Job:
+def parse_job_with_llm(job: Job, use_fallback: bool = True) -> tuple[Job, bool]:
     """
     Parse a job and attach extracted flags.
     Uses LLM if available, falls back to regex if needed.
+    
+    Returns:
+        tuple[Job, bool]: (parsed job, whether fallback was used)
     """
     # Try LLM extraction first
     flags = extract_flags_with_llm(job)
+    used_fallback = False
     
     if flags is None and use_fallback:
         print(f"[LLM] Using fallback parser for: {job.title}")
         flags = extract_flags_fallback(job)
+        used_fallback = True
     
     job.extracted_flags = flags
-    return job
+    return job, used_fallback
 
 
 if __name__ == "__main__":

@@ -25,18 +25,23 @@ ycombinator:
 
 # Remotive AI/ML Jobs scraper
 remotive:
-  enabled: true
+  enabled: false  # 403 Forbidden - strong bot detection
   max_results: 30  # Remote AI/ML specific
 
 # Wellfound (AngelList) scraper
 wellfound:
-  enabled: true
+  enabled: false  # 403 Forbidden - strong bot detection
   max_results: 30  # Startup job board
 
 # Hugging Face Jobs scraper
 huggingface:
-  enabled: true
+  enabled: true  # Using Workable API
   max_results: 20  # AI/ML focused job board
+
+# Tavily Job Search (bypasses bot detection)
+tavily_jobs:
+  enabled: true
+  max_results: 30  # Searches across Remotive, Wellfound, HF, and general web
 
 # Tavily Web Search configuration
 tavily:

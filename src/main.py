@@ -19,6 +19,7 @@ from src.scrapers.ycombinator import scrape_ycombinator_jobs
 from src.scrapers.remotive import scrape_remotive_jobs
 from src.scrapers.wellfound import scrape_wellfound_jobs
 from src.scrapers.huggingface import scrape_huggingface_jobs
+from src.scrapers.tavily_jobs import scrape_jobs_with_tavily
 from src.scrapers.llm_parser import parse_job_with_llm
 from src.scoring.engine import apply_hard_filters, score_job, rank_jobs
 from src.emailer import send_email
@@ -103,6 +104,15 @@ def run_pipeline(
             print(f"  - Hugging Face: {len(hf_jobs)} jobs")
         except Exception as e:
             print(f"  - Hugging Face: Error - {e}")
+    
+    # Tavily Web Search (bypasses bot detection)
+    if settings.tavily_jobs.get("enabled", True):
+        try:
+            tavily_jobs = scrape_jobs_with_tavily(max_results=settings.tavily_jobs.get("max_results", 30))
+            all_jobs.extend(tavily_jobs)
+            print(f"  - Tavily Search: {len(tavily_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Tavily Search: Error - {e}")
     
     print(f"  Total scraped: {len(all_jobs)} jobs")
     

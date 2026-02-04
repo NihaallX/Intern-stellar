@@ -170,6 +170,7 @@ class PipelineSettings(BaseModel):
     remotive: dict = Field(default_factory=dict)
     wellfound: dict = Field(default_factory=dict)
     huggingface: dict = Field(default_factory=dict)
+    tavily_jobs: dict = Field(default_factory=dict)
     tavily: dict = Field(default_factory=dict)
     email: dict = Field(default_factory=dict)
     llm: dict = Field(default_factory=dict)

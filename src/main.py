@@ -138,13 +138,31 @@ def run_pipeline(
     # =========================================
     print(f"\n[STEP 3] Extracting flags with LLM ({len(all_jobs)} jobs)...")
     
+    # Track LLM vs fallback usage
+    llm_success_count = 0
+    fallback_count = 0
+    
     for i, job in enumerate(all_jobs):
         try:
-            parse_job_with_llm(job, use_fallback=True)
+            job, used_fallback = parse_job_with_llm(job, use_fallback=True)
+            if used_fallback:
+                fallback_count += 1
+            else:
+                llm_success_count += 1
+            
             if (i + 1) % 10 == 0:
                 print(f"  Parsed {i + 1}/{len(all_jobs)}")
         except Exception as e:
             print(f"  Error parsing {job.title}: {e}")
+    
+    # Report extraction method used
+    print(f"\n  📊 EXTRACTION REPORT:")
+    if llm_success_count > 0:
+        print(f"  ✓ LLM (AI) extractions: {llm_success_count}/{len(all_jobs)} ({llm_success_count/len(all_jobs)*100:.1f}%)")
+    if fallback_count > 0:
+        print(f"  ⚠ FALLBACK (regex) extractions: {fallback_count}/{len(all_jobs)} ({fallback_count/len(all_jobs)*100:.1f}%)")
+        print(f"  ⚠ WARNING: LLM extraction failed, using keyword matching instead of AI analysis")
+        print(f"  ⚠ Fix: Check Groq API key or update groq SDK version")
     
     # =========================================
     # STEP 4: Hard Filters

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def scrape_huggingface_jobs(max_results: int = 20) -> List[Job]:
     """
-    Scrape AI/ML job listings from Hugging Face.
+    Scrape AI/ML job listings from Hugging Face (via Workable).
     
     Args:
         max_results: Maximum number of jobs to return
@@ -27,14 +27,21 @@ def scrape_huggingface_jobs(max_results: int = 20) -> List[Job]:
         List of Job objects
     """
     jobs = []
-    base_url = "https://huggingface.co"
+    base_url = "https://apply.workable.com"
     
     try:
-        logger.info(f"Fetching Hugging Face jobs from {base_url}/jobs")
+        logger.info(f"Fetching Hugging Face jobs from {base_url}/huggingface")
         response = requests.get(
-            f"{base_url}/jobs",
+            f"{base_url}/huggingface",
             headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Referer": "https://huggingface.co/",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1"
             },
             timeout=15
         )

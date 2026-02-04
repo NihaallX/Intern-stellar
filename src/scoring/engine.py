@@ -365,10 +365,28 @@ def apply_hard_filters(job: Job) -> bool:
         return False
     
     # Catch senior titles that LLM missed
-    senior_keywords = ['staff engineer', 'staff software', 'principal engineer', 'lead engineer', 
-                       'senior engineer', 'sr. engineer', 'sr engineer']
+    senior_keywords = [
+        'staff engineer', 'staff software', 'principal engineer', 
+        'lead engineer', 'lead ai', 'lead ml', 'lead software',
+        'senior engineer', 'sr. engineer', 'sr engineer',
+        'founding engineer'  # Founding roles typically require 5+ years
+    ]
     if any(keyword in combined_text for keyword in senior_keywords):
         print(f"[FILTER] Discarding senior role (title keyword): {job.title}")
+        return False
+    
+    # Discard non-AI-focused roles even if they mention AI tangentially
+    title_lower = job.title.lower()
+    if any(keyword in title_lower for keyword in ["full-stack", "fullstack", "full stack"]):
+        print(f"[FILTER] Discarding fullstack role (not AI-focused): {job.title}")
+        return False
+    
+    if any(keyword in title_lower for keyword in ["game developer", "game engineer", "game dev"]):
+        print(f"[FILTER] Discarding game dev role: {job.title}")
+        return False
+    
+    if any(keyword in title_lower for keyword in ["designer", "ui engineer", "ux engineer"]):
+        print(f"[FILTER] Discarding designer/UI role: {job.title}")
         return False
     
     # CRITICAL: Require AI/ML/LLM keywords in description or title

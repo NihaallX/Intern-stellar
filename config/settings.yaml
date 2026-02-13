@@ -15,7 +15,7 @@ weights:
 
 # Hacker News scraper
 hackernews:
-  enabled: true
+  enabled: false  # Disabled: produces "Unknown Role" garbage, wastes tokens
   # Search for the latest "Who's Hiring" thread
 
 # YC Work at a Startup scraper
@@ -41,7 +41,37 @@ huggingface:
 # Tavily Job Search (bypasses bot detection)
 tavily_jobs:
   enabled: true
-  max_results: 30  # Searches across Remotive, Wellfound, HF, and general web
+  max_results: 50  # Searches across 6 job boards: Remotive, Wellfound, Greenhouse, Lever, WeWorkRemotely, Remote.co
+
+# Adzuna Jobs API
+adzuna:
+  enabled: false  # Enable when API credentials added
+  max_results: 50  # Clean structured job data
+
+# Indeed Jobs API (via RapidAPI)
+indeed:
+  enabled: false  # Enable when RapidAPI key added
+  max_results: 50  # Major job aggregator
+
+# We Work Remotely scraper
+weworkremotely:
+  enabled: false  # Direct scraper, may hit rate limits
+  max_results: 30  # Remote-first job board
+
+# RemoteOK scraper (FREE - JSON API)
+remoteok:
+  enabled: true  # Public JSON API, no auth needed!
+  max_results: 50  # Large remote job board
+
+# Himalayas scraper (FREE)
+himalayas:
+  enabled: false  # 403 Forbidden - bot detection
+  max_results: 50  # Modern remote job board
+
+# JustRemote scraper (FREE)
+justremote:
+  enabled: false  # HTML parsing failing (wrong selectors)
+  max_results: 50  # Good for remote AI/ML
 
 # Tavily Web Search configuration
 tavily:

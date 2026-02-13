@@ -20,6 +20,12 @@ from src.scrapers.remotive import scrape_remotive_jobs
 from src.scrapers.wellfound import scrape_wellfound_jobs
 from src.scrapers.huggingface import scrape_huggingface_jobs
 from src.scrapers.tavily_jobs import scrape_jobs_with_tavily
+from src.scrapers.adzuna import scrape_adzuna_jobs
+from src.scrapers.indeed import scrape_indeed_jobs
+from src.scrapers.weworkremotely import scrape_weworkremotely_jobs
+from src.scrapers.remoteok import scrape_remoteok_jobs
+from src.scrapers.himalayas import scrape_himalayas_jobs
+from src.scrapers.justremote import scrape_justremote_jobs
 from src.scrapers.llm_parser import parse_job_with_llm
 from src.scoring.engine import apply_hard_filters, score_job, rank_jobs
 from src.emailer import send_email
@@ -113,6 +119,60 @@ def run_pipeline(
             print(f"  - Tavily Search: {len(tavily_jobs)} jobs")
         except Exception as e:
             print(f"  - Tavily Search: Error - {e}")
+    
+    # Adzuna Jobs API
+    if settings.adzuna.get("enabled", False):
+        try:
+            adzuna_jobs = scrape_adzuna_jobs(max_results=settings.adzuna.get("max_results", 50))
+            all_jobs.extend(adzuna_jobs)
+            print(f"  - Adzuna: {len(adzuna_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Adzuna: Error - {e}")
+    
+    # Indeed Jobs API
+    if settings.indeed.get("enabled", False):
+        try:
+            indeed_jobs = scrape_indeed_jobs(max_results=settings.indeed.get("max_results", 50))
+            all_jobs.extend(indeed_jobs)
+            print(f"  - Indeed: {len(indeed_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Indeed: Error - {e}")
+    
+    # We Work Remotely
+    if settings.weworkremotely.get("enabled", False):
+        try:
+            wwr_jobs = scrape_weworkremotely_jobs(max_results=settings.weworkremotely.get("max_results", 30))
+            all_jobs.extend(wwr_jobs)
+            print(f"  - WeWorkRemotely: {len(wwr_jobs)} jobs")
+        except Exception as e:
+            print(f"  - WeWorkRemotely: Error - {e}")
+    
+    # RemoteOK (free JSON API)
+    if settings.remoteok.get("enabled", False):
+        try:
+            ro_jobs = scrape_remoteok_jobs(max_results=settings.remoteok.get("max_results", 50))
+            all_jobs.extend(ro_jobs)
+            print(f"  - RemoteOK: {len(ro_jobs)} jobs")
+        except Exception as e:
+            print(f"  - RemoteOK: Error - {e}")
+    
+    # Himalayas (free scraping)
+    if settings.himalayas.get("enabled", False):
+        try:
+            him_jobs = scrape_himalayas_jobs(max_results=settings.himalayas.get("max_results", 50))
+            all_jobs.extend(him_jobs)
+            print(f"  - Himalayas: {len(him_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Himalayas: Error - {e}")
+    
+    # JustRemote (free scraping)
+    if settings.justremote.get("enabled", False):
+        try:
+            jr_jobs = scrape_justremote_jobs(max_results=settings.justremote.get("max_results", 50))
+            all_jobs.extend(jr_jobs)
+            print(f"  - JustRemote: {len(jr_jobs)} jobs")
+        except Exception as e:
+            print(f"  - JustRemote: Error - {e}")
     
     print(f"  Total scraped: {len(all_jobs)} jobs")
     

@@ -55,6 +55,25 @@ def get_smtp_credentials() -> tuple[str, str]:
     return email, password
 
 
+def get_adzuna_credentials() -> tuple[str, str]:
+    """Get Adzuna API credentials from environment."""
+    load_env()
+    app_id = os.getenv("ADZUNA_APP_ID")
+    app_key = os.getenv("ADZUNA_APP_KEY")
+    if not app_id or not app_key:
+        raise ValueError("Adzuna credentials not found in environment")
+    return app_id, app_key
+
+
+def get_rapidapi_key() -> str:
+    """Get RapidAPI key from environment (for Indeed/JSearch)."""
+    load_env()
+    key = os.getenv("RAPIDAPI_KEY")
+    if not key:
+        raise ValueError("RAPIDAPI_KEY not found in environment")
+    return key
+
+
 def load_profile() -> CandidateProfile:
     """Load candidate profile from config/profile.yaml."""
     config_path = get_project_root() / "config" / "profile.yaml"

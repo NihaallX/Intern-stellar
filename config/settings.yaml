@@ -20,7 +20,7 @@ hackernews:
 
 # YC Work at a Startup scraper
 ycombinator:
-  enabled: false  # Disabled: website structure changed, returns category pages not job posts
+  enabled: true  # Fixed: now scrapes actual job postings from YC companies
   max_results: 30  # YC has lots of AI startups
 
 # Remotive AI/ML Jobs scraper

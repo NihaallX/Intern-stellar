@@ -8,6 +8,7 @@ Includes rate limiting and retry logic for Groq free-tier limits.
 """
 
 import json
+import os
 import time
 import httpx
 from typing import Optional
@@ -24,6 +25,10 @@ RETRY_BASE_DELAY = 10  # seconds, doubles each retry
 
 # Track timing
 _last_call_time: float = 0
+
+# API key rotation
+_api_keys: list[str] = []
+_current_key_index: int = 0
 
 # System prompt for structured extraction
 EXTRACTION_PROMPT = """You are a job posting parser. Extract structured information from job descriptions.
@@ -82,6 +87,39 @@ Field definitions:
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
+def _get_api_keys() -> list[str]:
+    """Load all available Groq API keys."""
+    global _api_keys
+    if not _api_keys:
+        from src.utils.config import load_env
+        load_env()
+        primary = os.getenv("GROQ_API_KEY")
+        backup = os.getenv("GROQ_API_KEY_2")
+        if primary:
+            _api_keys.append(primary)
+        if backup:
+            _api_keys.append(backup)
+        if not _api_keys:
+            raise ValueError("No GROQ_API_KEY found in environment")
+        print(f"[LLM] Loaded {len(_api_keys)} API key(s)")
+    return _api_keys
+
+
+def _get_current_key() -> str:
+    """Get the current active API key."""
+    keys = _get_api_keys()
+    return keys[_current_key_index % len(keys)]
+
+
+def _rotate_key():
+    """Switch to the next API key."""
+    global _current_key_index
+    keys = _get_api_keys()
+    if len(keys) > 1:
+        _current_key_index = (_current_key_index + 1) % len(keys)
+        print(f"[LLM] Rotated to API key #{_current_key_index + 1}")
+
+
 def _rate_limit():
     """Enforce rate limiting between Groq API calls."""
     global _last_call_time
@@ -91,24 +129,31 @@ def _rate_limit():
     _last_call_time = time.time()
 
 
-def _call_groq_api(payload: dict, headers: dict) -> dict:
+def _call_groq_api(payload: dict) -> dict:
     """
-    Call Groq API with retry logic for rate limits.
+    Call Groq API with retry logic and key rotation.
     
-    Retries up to MAX_RETRIES times with exponential backoff on 429.
+    On 429 rate limit: rotates to backup API key, then retries
+    with exponential backoff.
     """
     for attempt in range(MAX_RETRIES):
         _rate_limit()
+        
+        api_key = _get_current_key()
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
         
         try:
             with httpx.Client(timeout=30.0) as client:
                 response = client.post(GROQ_API_URL, json=payload, headers=headers)
                 
                 if response.status_code == 429:
-                    # Rate limited — wait and retry
-                    retry_after = RETRY_BASE_DELAY * (2 ** attempt)
+                    # Rotate to backup key first
+                    _rotate_key()
                     
-                    # Check for Retry-After header
+                    retry_after = RETRY_BASE_DELAY * (2 ** attempt)
                     header_retry = response.headers.get("retry-after")
                     if header_retry:
                         try:
@@ -116,7 +161,7 @@ def _call_groq_api(payload: dict, headers: dict) -> dict:
                         except ValueError:
                             pass
                     
-                    print(f"[LLM] Rate limited (429), waiting {retry_after:.0f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                    print(f"[LLM] Rate limited (429), switched key + waiting {retry_after:.0f}s (attempt {attempt + 1}/{MAX_RETRIES})")
                     time.sleep(retry_after)
                     continue
                 
@@ -125,13 +170,14 @@ def _call_groq_api(payload: dict, headers: dict) -> dict:
                 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
+                _rotate_key()
                 retry_after = RETRY_BASE_DELAY * (2 ** attempt)
-                print(f"[LLM] Rate limited (429), waiting {retry_after:.0f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                print(f"[LLM] Rate limited (429), switched key + waiting {retry_after:.0f}s (attempt {attempt + 1}/{MAX_RETRIES})")
                 time.sleep(retry_after)
                 continue
             raise
     
-    raise Exception(f"Rate limited after {MAX_RETRIES} retries")
+    raise Exception(f"Rate limited after {MAX_RETRIES} retries on all keys")
 
 
 def extract_flags_with_llm(job: Job) -> Optional[ExtractedFlags]:
@@ -143,7 +189,6 @@ def extract_flags_with_llm(job: Job) -> Optional[ExtractedFlags]:
     """
     try:
         settings = load_settings()
-        api_key = get_groq_api_key()
         
         # Build the prompt
         user_prompt = f"""Parse this job posting:
@@ -171,13 +216,8 @@ Output ONLY the JSON object with extracted flags."""
             "max_tokens": settings.llm.get("max_tokens", 1000),
         }
         
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        
-        # Call with rate limiting and retry
-        result = _call_groq_api(payload, headers)
+        # Call with rate limiting, retry, and key rotation
+        result = _call_groq_api(payload)
         content = result["choices"][0]["message"]["content"].strip()
         
         # Parse JSON response

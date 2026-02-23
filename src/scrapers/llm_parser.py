@@ -4,15 +4,26 @@ Extracts structured flags from job descriptions.
 DOES NOT score jobs - only extracts flags for rule-based scoring.
 
 Uses direct HTTP calls to Groq API to avoid SDK version conflicts.
+Includes rate limiting and retry logic for Groq free-tier limits.
 """
 
 import json
+import time
 import httpx
 from typing import Optional
 
 from src.models import Job, ExtractedFlags, CompanyType, ExperienceLevel
 from src.utils.config import get_groq_api_key, load_settings
 
+
+# Groq free-tier: 30 requests/min, 14,400 requests/day
+# We pace at ~20 req/min to stay safe (3 seconds between calls)
+RATE_LIMIT_DELAY = 3.0  # seconds between API calls
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 10  # seconds, doubles each retry
+
+# Track timing
+_last_call_time: float = 0
 
 # System prompt for structured extraction
 EXTRACTION_PROMPT = """You are a job posting parser. Extract structured information from job descriptions.
@@ -71,11 +82,63 @@ Field definitions:
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
+def _rate_limit():
+    """Enforce rate limiting between Groq API calls."""
+    global _last_call_time
+    elapsed = time.time() - _last_call_time
+    if elapsed < RATE_LIMIT_DELAY:
+        time.sleep(RATE_LIMIT_DELAY - elapsed)
+    _last_call_time = time.time()
+
+
+def _call_groq_api(payload: dict, headers: dict) -> dict:
+    """
+    Call Groq API with retry logic for rate limits.
+    
+    Retries up to MAX_RETRIES times with exponential backoff on 429.
+    """
+    for attempt in range(MAX_RETRIES):
+        _rate_limit()
+        
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(GROQ_API_URL, json=payload, headers=headers)
+                
+                if response.status_code == 429:
+                    # Rate limited — wait and retry
+                    retry_after = RETRY_BASE_DELAY * (2 ** attempt)
+                    
+                    # Check for Retry-After header
+                    header_retry = response.headers.get("retry-after")
+                    if header_retry:
+                        try:
+                            retry_after = max(float(header_retry), retry_after)
+                        except ValueError:
+                            pass
+                    
+                    print(f"[LLM] Rate limited (429), waiting {retry_after:.0f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                    time.sleep(retry_after)
+                    continue
+                
+                response.raise_for_status()
+                return response.json()
+                
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                retry_after = RETRY_BASE_DELAY * (2 ** attempt)
+                print(f"[LLM] Rate limited (429), waiting {retry_after:.0f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(retry_after)
+                continue
+            raise
+    
+    raise Exception(f"Rate limited after {MAX_RETRIES} retries")
+
+
 def extract_flags_with_llm(job: Job) -> Optional[ExtractedFlags]:
     """
     Use Groq LLM to extract structured flags from a job.
     
-    Uses direct HTTP calls to avoid Groq SDK proxy conflicts.
+    Uses direct HTTP calls with rate limiting and retry logic.
     The LLM does NOT score - it only extracts boolean/enum flags.
     """
     try:
@@ -98,7 +161,6 @@ Requirements:
 
 Output ONLY the JSON object with extracted flags."""
 
-        # Direct HTTP call to Groq API (bypasses SDK proxy issue)
         payload = {
             "model": settings.llm.get("model", "llama-3.3-70b-versatile"),
             "messages": [
@@ -114,12 +176,8 @@ Output ONLY the JSON object with extracted flags."""
             "Content-Type": "application/json",
         }
         
-        # Use httpx directly, no proxy interference
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(GROQ_API_URL, json=payload, headers=headers)
-            response.raise_for_status()
-        
-        result = response.json()
+        # Call with rate limiting and retry
+        result = _call_groq_api(payload, headers)
         content = result["choices"][0]["message"]["content"].strip()
         
         # Parse JSON response
@@ -156,12 +214,6 @@ Output ONLY the JSON object with extracted flags."""
         
         return flags
         
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 429:
-            print(f"[LLM] Rate limited by Groq, using fallback")
-        else:
-            print(f"[LLM] HTTP error {e.response.status_code}: {e.response.text[:200]}")
-        return None
     except Exception as e:
         print(f"[LLM] Error extracting flags: {e}")
         return None

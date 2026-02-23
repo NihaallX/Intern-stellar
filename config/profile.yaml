@@ -1,12 +1,13 @@
 # Candidate Profile (Ground Truth)
 # This is the canonical reference for relevance scoring.
 
-name: "AI Systems Engineer Candidate"
+name: "AI Systems Engineer / AI PM Candidate"
 
 summary: |
-  Applied GenAI / AI Systems–oriented early-career engineer.
+  Applied GenAI / AI Systems–oriented early-career engineer & aspiring AI PM.
   Strong in production LLM systems, RAG, agentic workflows.
   Experience with voice AI, FastAPI backends, AWS Lambda, cloud-native deployment.
+  Interested in Product Management at AI-native companies.
   Startup internship experience, shipped real systems, latency optimization.
   Not a research-first or PhD-track ML profile.
 
@@ -24,6 +25,11 @@ priority_skills:
   - SNS
   - voice AI
   - conversational AI
+  - product management
+  - product strategy
+  - product roadmap
+  - AI product
+  - GenAI
 
 # Secondary skills (medium weight)
 secondary_skills:
@@ -34,6 +40,14 @@ secondary_skills:
   - PostgreSQL
   - WebSockets
   - real-time systems
+  - data analysis
+  - stakeholder management
+  - user research
+  - A/B testing
+  - metrics
+  - SQL
+  - Figma
+  - PRD
 
 # De-prioritize / Penalize
 deprioritize:
@@ -44,8 +58,9 @@ deprioritize:
   - unpaid
   - on-site only
 
-# Target role types
+# Target role types (EXPANDED)
 target_roles:
+  # Engineering roles
   - AI Engineer
   - Applied AI Engineer
   - GenAI Engineer
@@ -53,6 +68,27 @@ target_roles:
   - AI Systems Engineer
   - Machine Learning Engineer  # if applied/production-focused
   - Backend Engineer  # if AI-adjacent
+  - AI Forward Deployed Engineer
+  - Forward Deployed Engineer
+  - Solutions Engineer  # if AI-focused
+  - AI Platform Engineer
+  - ML Platform Engineer
+  - AI Infrastructure Engineer
+  - Full Stack AI Engineer
+  # Product roles
+  - Product Manager
+  - Associate Product Manager
+  - AI Product Manager
+  - Technical Product Manager
+  - Product Manager AI/ML
+  - APM
+  - Junior Product Manager
+  - Product Analyst
+  # Hybrid / Emerging
+  - AI Researcher (Applied)
+  - AI Developer Advocate
+  - Developer Relations Engineer
+  - Technical Program Manager  # if AI-focused
 
 # Experience level
 experience_level: "intern_or_junior"  # intern, junior, 0-2 years

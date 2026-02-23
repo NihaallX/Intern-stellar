@@ -26,6 +26,9 @@ from src.scrapers.weworkremotely import scrape_weworkremotely_jobs
 from src.scrapers.remoteok import scrape_remoteok_jobs
 from src.scrapers.himalayas import scrape_himalayas_jobs
 from src.scrapers.justremote import scrape_justremote_jobs
+from src.scrapers.linkedin import scrape_linkedin_jobs
+from src.scrapers.builtin import scrape_builtin_jobs
+from src.scrapers.simplify import scrape_simplify_jobs
 from src.scrapers.llm_parser import parse_job_with_llm
 from src.scoring.engine import apply_hard_filters, score_job, rank_jobs
 from src.emailer import send_email
@@ -173,6 +176,33 @@ def run_pipeline(
             print(f"  - JustRemote: {len(jr_jobs)} jobs")
         except Exception as e:
             print(f"  - JustRemote: Error - {e}")
+    
+    # LinkedIn Jobs (via Tavily)
+    if settings.linkedin.get("enabled", False):
+        try:
+            ln_jobs = scrape_linkedin_jobs(max_results=settings.linkedin.get("max_results", 30))
+            all_jobs.extend(ln_jobs)
+            print(f"  - LinkedIn: {len(ln_jobs)} jobs")
+        except Exception as e:
+            print(f"  - LinkedIn: Error - {e}")
+    
+    # Builtin.com Jobs (via Tavily)
+    if settings.builtin.get("enabled", False):
+        try:
+            bi_jobs = scrape_builtin_jobs(max_results=settings.builtin.get("max_results", 30))
+            all_jobs.extend(bi_jobs)
+            print(f"  - Builtin: {len(bi_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Builtin: Error - {e}")
+    
+    # Simplify.jobs (via Tavily)
+    if settings.simplify.get("enabled", False):
+        try:
+            sm_jobs = scrape_simplify_jobs(max_results=settings.simplify.get("max_results", 30))
+            all_jobs.extend(sm_jobs)
+            print(f"  - Simplify: {len(sm_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Simplify: Error - {e}")
     
     print(f"  Total scraped: {len(all_jobs)} jobs")
     

@@ -6,6 +6,7 @@ All models are Pydantic for validation and serialization.
 from typing import Optional
 from pydantic import BaseModel, Field, HttpUrl
 from enum import Enum
+from datetime import datetime, date
 
 
 class CompanyType(str, Enum):
@@ -66,6 +67,10 @@ class Job(BaseModel):
     
     # Deduplication
     job_id: Optional[str] = None  # hash of url or unique identifier
+    
+    # Date tracking
+    posted_date: Optional[datetime] = None  # When the job was posted
+    scraped_date: Optional[datetime] = None  # When we found it
     
     def generate_job_id(self) -> str:
         """Generate a unique ID for deduplication."""

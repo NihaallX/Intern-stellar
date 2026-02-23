@@ -37,20 +37,50 @@ ATS_SITES = [
     "apply.workable.com",
     "smartrecruiters.com",
     "jobvite.com",
+    "myworkdayjobs.com",
+    "icims.com",
+    "careers.google.com",
+    "jobs.apple.com",
+    "careers.microsoft.com",
 ]
 
-# Search keywords for AI roles
+# Search keywords for AI roles (EXPANDED with PM + FDE)
 AI_KEYWORDS = [
-    '"AI Engineer"',
+    # === Engineering titles ===
+    '"AI Engineer" intern OR junior',
     '"GenAI Engineer"',
     '"LLM Engineer"',
-    '"Applied AI"',
-    '"Machine Learning Engineer" intern',
+    '"Applied AI" intern OR junior OR engineer',
+    '"Machine Learning Engineer" intern OR junior',
     '"AI intern"',
-    '"Generative AI"',
+    '"Generative AI" engineer OR intern',
     'RAG engineer',
     '"agentic" engineer',
     '"Applied ML"',
+    '"AI Platform Engineer"',
+    '"ML Platform" intern OR junior',
+    '"AI Infrastructure"',
+    '"Full Stack AI"',
+    # === Forward Deployed Engineer ===
+    '"Forward Deployed Engineer"',
+    '"AI Forward Deployed"',
+    '"Forward Deployed" AI OR ML',
+    '"Solutions Engineer" AI OR ML OR LLM',
+    '"Field Engineer" AI OR ML',
+    # === Product Manager roles ===
+    '"Product Manager" AI OR ML OR LLM',
+    '"Associate Product Manager" AI OR ML',
+    '"AI Product Manager"',
+    '"Technical Product Manager" AI OR ML',
+    '"APM" AI OR machine learning',
+    '"Junior Product Manager" AI OR tech',
+    '"Product Manager" "generative AI"',
+    '"Product Manager" intern OR associate',
+    # === Hybrid / Adjacent ===
+    '"Technical Program Manager" AI OR ML',
+    '"Developer Relations" AI OR LLM',
+    '"AI Developer Advocate"',
+    '"Product Analyst" AI OR ML',
 ]
 
 
@@ -60,14 +90,14 @@ def build_xray_queries() -> list[str]:
     """
     queries = []
     
+    # Split ATS sites into batches of 5 for manageable query length
+    site_batches = [ATS_SITES[i:i+5] for i in range(0, len(ATS_SITES), 5)]
+    
     for keyword in AI_KEYWORDS:
-        # Combine multiple sites in one query for efficiency
-        site_query = " OR ".join([f"site:{site}" for site in ATS_SITES[:5]])
-        queries.append(f"({site_query}) {keyword}")
-        
-        site_query2 = " OR ".join([f"site:{site}" for site in ATS_SITES[5:]])
-        if site_query2:
-            queries.append(f"({site_query2}) {keyword}")
+        # Only use first 2 site batches to keep query count reasonable
+        for batch in site_batches[:2]:
+            site_query = " OR ".join([f"site:{site}" for site in batch])
+            queries.append(f"({site_query}) {keyword}")
     
     return queries
 

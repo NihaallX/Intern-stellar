@@ -3,6 +3,7 @@ Tavily Web Search Job Scraper.
 
 Uses Tavily API to search for AI/ML jobs across multiple sources,
 bypassing bot detection issues.
+EXPANDED: Now searches for PM, FDE, and engineering roles.
 """
 
 import logging
@@ -17,9 +18,9 @@ from ..utils.config import get_tavily_api_key
 logger = logging.getLogger(__name__)
 
 
-def scrape_jobs_with_tavily(max_results: int = 30) -> List[Job]:
+def scrape_jobs_with_tavily(max_results: int = 50) -> List[Job]:
     """
-    Search for AI/ML jobs using Tavily web search API.
+    Search for AI/ML/PM jobs using Tavily web search API.
     
     This bypasses bot detection by using Tavily's infrastructure.
     
@@ -35,19 +36,37 @@ def scrape_jobs_with_tavily(max_results: int = 30) -> List[Job]:
         api_key = get_tavily_api_key()
         client = TavilyClient(api_key=api_key)
         
-        # Search queries for specific job postings (not search pages)
+        # EXPANDED search queries for AI + PM + FDE roles
         search_queries = [
-            "site:remotive.com/remote-jobs/ai-ml intitle:hiring OR intitle:engineer",
-            "site:wellfound.com/l intitle:machine learning OR intitle:AI engineer",
-            "site:boards.greenhouse.io intitle:machine learning OR intitle:AI",
-            "site:jobs.lever.co intitle:machine learning OR intitle:AI engineer",
-            "site:weworkremotely.com/remote-jobs intitle:AI OR intitle:machine learning",
-            "site:remote.co/remote-jobs intitle:machine learning OR intitle:AI"
+            # === Engineering roles ===
+            "site:boards.greenhouse.io intitle:AI engineer OR intitle:ML engineer",
+            "site:jobs.lever.co intitle:AI engineer OR intitle:ML engineer",
+            'site:boards.greenhouse.io intitle:"GenAI" OR intitle:"LLM"',
+            'site:jobs.lever.co intitle:"generative AI" OR intitle:"LLM"',
+            # === PM roles ===
+            'site:boards.greenhouse.io intitle:"Product Manager" AI OR ML',
+            'site:jobs.lever.co intitle:"Product Manager" AI OR ML',
+            'site:boards.greenhouse.io intitle:"Associate Product Manager"',
+            'site:jobs.lever.co intitle:"Associate Product Manager"',
+            # === FDE / Solutions ===
+            'site:boards.greenhouse.io intitle:"Forward Deployed" OR intitle:"Solutions Engineer"',
+            'site:jobs.lever.co intitle:"Forward Deployed" OR intitle:"Solutions Engineer"',
+            # === Remote job boards ===
+            "site:remotive.com/remote-jobs intitle:AI OR intitle:machine learning OR intitle:product manager",
+            "site:weworkremotely.com intitle:AI OR intitle:machine learning OR intitle:product manager",
+            # === LinkedIn public listings (bypass detection) ===
+            'site:linkedin.com/jobs/view "AI Engineer" OR "Product Manager AI" OR "Forward Deployed"',
+            'site:linkedin.com/jobs/view "Associate Product Manager" OR "AI intern" OR "GenAI"',
+            # === Simplify.jobs ===
+            'site:simplify.jobs intitle:AI OR intitle:ML OR intitle:"Product Manager"',
+            # === Builtin.com ===
+            'site:builtin.com/job "AI" OR "machine learning" OR "product manager" intern OR junior',
         ]
         
         logger.info(f"Searching for jobs with Tavily across {len(search_queries)} queries")
+        print(f"[TAVILY] Searching across {len(search_queries)} queries...")
         
-        for query in search_queries:
+        for idx, query in enumerate(search_queries):
             try:
                 logger.debug(f"Tavily search: {query}")
                 
@@ -56,7 +75,6 @@ def scrape_jobs_with_tavily(max_results: int = 30) -> List[Job]:
                     query=query,
                     search_depth="basic",
                     max_results=5,  # Get top 5 per query
-                    include_domains=["remotive.com", "wellfound.com", "greenhouse.io", "lever.co", "weworkremotely.com", "remote.co"]
                 )
                 
                 # Parse results
@@ -66,91 +84,34 @@ def scrape_jobs_with_tavily(max_results: int = 30) -> List[Job]:
                     content = result.get("content", "")
                     
                     # Skip non-job pages (search results, category pages, etc.)
-                    skip_keywords = ["search", "category", "browse", "all jobs", "job board", "jobs in"]
+                    skip_keywords = ["search", "category", "browse", "all jobs", "job board", "jobs in", "job listings", "careers page"]
                     if any(keyword in url.lower() for keyword in skip_keywords):
                         continue
                     if any(keyword in title.lower() for keyword in skip_keywords):
                         continue
                     
                     # Extract company from URL and title
-                    company = "Unknown Company"
-                    
-                    # Parse company from different job board formats
-                    if "remotive.com" in url:
-                        # Remotive format: /remote-jobs/ai-ml/job-title-1234
-                        parts = title.split(" at ")
-                        if len(parts) >= 2:
-                            company = parts[1].split(" - ")[0].strip()
-                        else:
-                            company = "Remote Company"
-                    
-                    elif "wellfound.com" in url:
-                        # Wellfound format: /l/company-name/job-title
-                        parts = url.split("/l/")
-                        if len(parts) > 1:
-                            company_slug = parts[1].split("/")[0]
-                            company = company_slug.replace("-", " ").title()
-                        # Also try parsing from title
-                        title_parts = title.split(" at ")
-                        if len(title_parts) >= 2:
-                            company = title_parts[1].split(" - ")[0].strip()
-                    
-                    elif "greenhouse.io" in url:
-                        # Greenhouse format: boards.greenhouse.io/companyname/jobs/123456
-                        if "boards.greenhouse.io/" in url:
-                            parts = url.split("boards.greenhouse.io/")[1].split("/")
-                            if len(parts) > 0:
-                                company = parts[0].replace("-", " ").title()
-                        # Also check job-boards.greenhouse.io
-                        elif "job-boards.greenhouse.io/" in url:
-                            parts = url.split("job-boards.greenhouse.io/")[1].split("/")
-                            if len(parts) > 0:
-                                company = parts[0].replace("-", " ").title()
-                    
-                    elif "lever.co" in url:
-                        # Lever format: jobs.lever.co/companyname/job-id
-                        if "jobs.lever.co/" in url:
-                            parts = url.split("jobs.lever.co/")[1].split("/")
-                            if len(parts) > 0:
-                                company = parts[0].replace("-", " ").title()
-                    
-                    elif "weworkremotely.com" in url:
-                        # Parse from content or title
-                        parts = title.split(" at ")
-                        if len(parts) >= 2:
-                            company = parts[1].split(" - ")[0].strip()
-                    
-                    elif "remote.co" in url:
-                        # Parse from content or title
-                        parts = title.split(" at ")
-                        if len(parts) >= 2:
-                            company = parts[1].split(" - ")[0].strip()
-                    
-                    elif "huggingface" in url.lower():
-                        company = "Hugging Face"
+                    company = _extract_company(title, url)
                     
                     # Determine location
-                    location = "Remote"
-                    if "remote" in content.lower() or "remote" in title.lower():
-                        location = "Remote"
-                    elif "san francisco" in content.lower():
-                        location = "San Francisco, CA"
-                    elif "new york" in content.lower():
-                        location = "New York, NY"
+                    location = _extract_location(title, content)
                     
                     if title and url and len(title) > 5:
                         jobs.append(Job(
                             title=title,
                             company=company,
                             location=location,
-                            description=content[:1000],  # Limit description length
+                            description=content[:2000],
                             url=url,
-                            source="Tavily Search"
+                            source="tavily",
                         ))
                         logger.debug(f"Found job via Tavily: {title} at {company}")
                 
-                # Rate limiting - be nice to Tavily
+                # Rate limiting
                 time.sleep(1.5)
+                
+                if (idx + 1) % 5 == 0:
+                    print(f"  Progress: {idx + 1}/{len(search_queries)} queries searched")
                 
             except Exception as e:
                 logger.warning(f"Error searching with query '{query}': {e}")
@@ -164,10 +125,65 @@ def scrape_jobs_with_tavily(max_results: int = 30) -> List[Job]:
                 seen_urls.add(job.url)
                 unique_jobs.append(job)
         
-        logger.info(f"Successfully found {len(unique_jobs)} unique jobs via Tavily (from {len(jobs)} total)")
+        print(f"[TAVILY] Found {len(unique_jobs)} unique jobs (from {len(jobs)} total)")
+        logger.info(f"Successfully found {len(unique_jobs)} unique jobs via Tavily")
         
         return unique_jobs[:max_results]
         
     except Exception as e:
         logger.error(f"Failed to search jobs with Tavily: {e}")
+        print(f"[TAVILY] Error: {e}")
         return []
+
+
+def _extract_company(title: str, url: str) -> str:
+    """Extract company name from title and URL."""
+    company = "Unknown Company"
+    
+    # Try "at Company" pattern in title
+    for sep in [" at ", " - ", " | "]:
+        if sep in title:
+            parts = title.split(sep)
+            if len(parts) >= 2:
+                candidate = parts[-1].strip() if sep == " | " else parts[1].split(" - ")[0].strip()
+                if len(candidate) > 2 and len(candidate) < 60:
+                    company = candidate
+                    break
+    
+    if company == "Unknown Company":
+        # Parse from URL
+        if "greenhouse.io/" in url:
+            slug = url.split("greenhouse.io/")[1].split("/")[0]
+            company = slug.replace("-", " ").title()
+        elif "lever.co/" in url:
+            slug = url.split("lever.co/")[1].split("/")[0]
+            company = slug.replace("-", " ").title()
+        elif "ashbyhq.com/" in url:
+            slug = url.split("ashbyhq.com/")[1].split("/")[0]
+            company = slug.replace("-", " ").title()
+        elif "linkedin.com" in url:
+            company = title.split(" hiring ")[0].strip() if " hiring " in title.lower() else "Unknown Company"
+    
+    return company[:100]
+
+
+def _extract_location(title: str, content: str) -> str:
+    """Extract location from title and content."""
+    text = f"{title} {content}".lower()
+    
+    if "remote" in text:
+        return "Remote"
+    elif "san francisco" in text or "sf" in text:
+        return "San Francisco, CA"
+    elif "new york" in text or "nyc" in text:
+        return "New York, NY"
+    elif "london" in text:
+        return "London, UK"
+    elif "bangalore" in text or "bengaluru" in text:
+        return "Bangalore, India"
+    elif "singapore" in text:
+        return "Singapore"
+    elif "berlin" in text:
+        return "Berlin, Germany"
+    
+    return "Unknown"

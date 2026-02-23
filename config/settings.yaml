@@ -16,7 +16,6 @@ weights:
 # Hacker News scraper
 hackernews:
   enabled: false  # Disabled: produces "Unknown Role" garbage, wastes tokens
-  # Search for the latest "Who's Hiring" thread
 
 # YC Work at a Startup scraper
 ycombinator:
@@ -26,59 +25,74 @@ ycombinator:
 # Remotive AI/ML Jobs scraper
 remotive:
   enabled: false  # 403 Forbidden - strong bot detection
-  max_results: 30  # Remote AI/ML specific
+  max_results: 30
 
 # Wellfound (AngelList) scraper
 wellfound:
   enabled: false  # 403 Forbidden - strong bot detection
-  max_results: 30  # Startup job board
+  max_results: 30
 
 # Hugging Face Jobs scraper
 huggingface:
   enabled: true  # Using Workable API
-  max_results: 20  # AI/ML focused job board
+  max_results: 20
 
 # Tavily Job Search (bypasses bot detection)
 tavily_jobs:
   enabled: true
-  max_results: 50  # Searches across 6 job boards: Remotive, Wellfound, Greenhouse, Lever, WeWorkRemotely, Remote.co
+  max_results: 50  # EXPANDED: Now searches 16 queries across Greenhouse, Lever, LinkedIn, Simplify, Builtin, etc.
+
+# LinkedIn Jobs (via Tavily - bypasses bot detection)
+linkedin:
+  enabled: true
+  max_results: 30  # Searches AI/PM/FDE roles on LinkedIn public listings
+
+# Builtin.com Jobs (via Tavily)
+builtin:
+  enabled: true
+  max_results: 30  # Startup & tech jobs: AI, PM, FDE roles
+
+# Simplify.jobs (via Tavily)
+simplify:
+  enabled: true
+  max_results: 30  # Popular with interns & new grads
 
 # Adzuna Jobs API
 adzuna:
   enabled: false  # Enable when API credentials added
-  max_results: 50  # Clean structured job data
+  max_results: 50
 
 # Indeed Jobs API (via RapidAPI)
 indeed:
   enabled: false  # Enable when RapidAPI key added
-  max_results: 50  # Major job aggregator
+  max_results: 50
 
 # We Work Remotely scraper
 weworkremotely:
   enabled: false  # Direct scraper, may hit rate limits
-  max_results: 30  # Remote-first job board
+  max_results: 30
 
 # RemoteOK scraper (FREE - JSON API)
 remoteok:
   enabled: true  # Public JSON API, no auth needed!
-  max_results: 50  # Large remote job board
+  max_results: 50
 
 # Himalayas scraper (FREE)
 himalayas:
   enabled: false  # 403 Forbidden - bot detection
-  max_results: 50  # Modern remote job board
+  max_results: 50
 
 # JustRemote scraper (FREE)
 justremote:
   enabled: false  # HTML parsing failing (wrong selectors)
-  max_results: 50  # Good for remote AI/ML
+  max_results: 50
 
 # Tavily Web Search configuration
 tavily:
   api_key: ""  # Set via TAVILY_API_KEY environment variable
   enabled: true
-  enrich_companies: true  # Enable company enrichment via web search
-  max_enrichment_jobs: 80  # Increased from 30 (~160 credits/run, 1280/month < 1000 free tier)
+  enrich_companies: true
+  max_enrichment_jobs: 80
 
 # Email configuration
 email:
@@ -93,5 +107,4 @@ llm:
 
 # Deduplication
 dedup:
-  # Store seen job IDs in this file
   cache_file: "data/seen_jobs.json"

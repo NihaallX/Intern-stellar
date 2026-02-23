@@ -186,10 +186,15 @@ def extract_flags_fallback(job: Job) -> ExtractedFlags:
         is_onsite_only="on-site only" in text or "no remote" in text,
     )
     
-    # Experience level detection (improved to catch more patterns)
-    if "intern" in text:
+    # Experience level detection (improved to detect PM/FDE/APM roles)
+    title_lower = job.title.lower()
+    
+    # Check for PM/APM (typically junior/entry-level)
+    if "associate product manager" in title_lower or "apm" in title_lower or "junior product manager" in title_lower:
+        flags.experience_level = ExperienceLevel.JUNIOR
+    elif "intern" in text:
         flags.experience_level = ExperienceLevel.INTERN
-    elif "junior" in text or "0-2 years" in text or "entry level" in text or "entry-level" in text:
+    elif "junior" in text or "0-2 years" in text or "entry level" in text or "entry-level" in text or "new grad" in text:
         flags.experience_level = ExperienceLevel.JUNIOR
     elif any(pattern in text for pattern in ["senior", "sr.", "staff", "principal", "lead", "5+ years", "5-7 years", "6+ years", "7+ years"]):
         flags.experience_level = ExperienceLevel.SENIOR

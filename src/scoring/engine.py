@@ -92,11 +92,11 @@ def compute_skill_match(flags: ExtractedFlags) -> tuple[float, list[str]]:
     
     # Secondary AI/ML skills
     if flags.has_fastapi:
-        score += 2  # Reduced from 3 (common in fullstack)
+        score += 2
         reasons.append("FastAPI")
     
     if flags.has_aws:
-        score += 2  # Reduced from 3 (common in devops)
+        score += 2
         reasons.append("AWS")
     
     # REMOVED: has_backend (too generic, matches all software jobs)
@@ -240,7 +240,7 @@ def compute_penalties(job: Job, flags: ExtractedFlags) -> tuple[float, list[str]
         adjustment -= 3
         reasons.append("On-site only")
     
-    # NEW: Penalize non-AI engineering roles
+    # Penalize non-AI engineering roles
     title_lower = job.title.lower()
     if any(keyword in title_lower for keyword in ["fullstack", "full stack", "full-stack"]):
         adjustment -= 5
@@ -262,6 +262,22 @@ def compute_penalties(job: Job, flags: ExtractedFlags) -> tuple[float, list[str]
     if job.remote:
         adjustment += 3
         reasons.append("Remote-friendly")
+    
+    # ===== PM / FDE ROLE BONUSES =====
+    pm_keywords = ["product manager", "associate product manager", "apm", "technical product manager", "ai product manager"]
+    if any(kw in title_lower for kw in pm_keywords):
+        adjustment += 5
+        reasons.append("Product Manager role (high relevance)")
+    
+    fde_keywords = ["forward deployed", "solutions engineer", "field engineer"]
+    if any(kw in title_lower for kw in fde_keywords):
+        adjustment += 5
+        reasons.append("Forward Deployed / Solutions Engineer role")
+    
+    devrel_keywords = ["developer relations", "developer advocate", "devrel"]
+    if any(kw in title_lower for kw in devrel_keywords):
+        adjustment += 3
+        reasons.append("DevRel / Advocate role")
     
     # Clamp to range
     adjustment = max(-10, min(10, adjustment))
@@ -389,19 +405,40 @@ def apply_hard_filters(job: Job) -> bool:
         print(f"[FILTER] Discarding designer/UI role: {job.title}")
         return False
     
-    # CRITICAL: Require AI/ML/LLM keywords in description or title
-    # This prevents generic fullstack/backend roles from passing
+    # CRITICAL: Require AI/ML/PM/FDE keywords in description or title
+    # This prevents generic roles from passing
     ai_keywords = [
+        # Engineering
         'llm', 'large language model', 'gpt', 'genai', 'generative ai',
         'rag', 'retrieval augmented', 'agentic', 'agent', 'langchain',
         'machine learning', 'ml engineer', 'ai engineer', 'applied ai',
         'transformer', 'embedding', 'prompt engineering', 'fine-tuning',
         'vector database', 'nlp', 'natural language',
+        # PM roles 
         'ai product manager', 'product manager ai', 'ai pm', 'product management ai',
-        'associate product manager', 'apm', 'product manager - ai', 'pm - ai'
+        'associate product manager', 'apm', 'product manager - ai', 'pm - ai',
+        'product manager ml', 'product manager machine learning',
+        'technical product manager', 'product manager llm', 'pm genai',
+        'junior product manager',
+        # FDE / Solutions
+        'forward deployed engineer', 'forward deployed', 'solutions engineer ai',
+        'solutions engineer ml', 'field engineer ai',
+        # DevRel
+        'developer relations', 'developer advocate', 'ai advocate',
+        # Platform
+        'ai platform', 'ml platform', 'ai infrastructure',
     ]
     
     has_ai_keyword = any(keyword in combined_text for keyword in ai_keywords)
+    
+    # Also check title specifically for PM/FDE roles
+    pm_fde_titles = [
+        'product manager', 'associate product manager', 'apm',
+        'forward deployed', 'solutions engineer',
+        'developer relations', 'developer advocate',
+        'technical program manager',
+    ]
+    has_pm_fde_title = any(keyword in title_lower for keyword in pm_fde_titles)
     
     # Also check if job has actual AI flags set
     has_ai_flags = (
@@ -409,7 +446,7 @@ def apply_hard_filters(job: Job) -> bool:
         flags.has_langchain or flags.has_langgraph
     )
     
-    if not has_ai_keyword and not has_ai_flags:
+    if not has_ai_keyword and not has_ai_flags and not has_pm_fde_title:
         print(f"[FILTER] Discarding non-AI role: {job.title}")
         return False
     

@@ -33,6 +33,7 @@ from src.scrapers.llm_parser import parse_job_with_llm
 from src.scoring.engine import apply_hard_filters, score_job, rank_jobs
 from src.emailer import send_email
 from src.utils.dedup import filter_new_jobs
+from src.utils.date_filter import detect_posted_date, is_job_too_old, is_likely_stale
 from src.utils.config import load_settings
 from src.utils.web_search import search_company_info, clear_cache, get_api_call_count
 
@@ -222,6 +223,42 @@ def run_pipeline(
             return []
     else:
         print("\n[STEP 2] Skipping deduplication (--skip-dedup)")
+    
+    # =========================================
+    # STEP 2.5: Date Freshness Filter
+    # =========================================
+    print(f"\n[STEP 2.5] Filtering stale jobs...")
+    now = datetime.now()
+    fresh_jobs = []
+    stale_count = 0
+    
+    for job in all_jobs:
+        # Set scraped date
+        job.scraped_date = now
+        
+        # Try to detect posted date
+        job.posted_date = detect_posted_date(job.title, job.description, job.url)
+        
+        # Check if too old by detected date
+        if is_job_too_old(job.posted_date):
+            stale_count += 1
+            print(f"  [STALE] {job.title} (posted {job.posted_date.strftime('%Y-%m-%d') if job.posted_date else '?'})")
+            continue
+        
+        # Check for stale heuristics (old year references, closed postings)
+        if is_likely_stale(job.title, job.description):
+            stale_count += 1
+            print(f"  [STALE] {job.title} (old year/closed posting detected)")
+            continue
+        
+        fresh_jobs.append(job)
+    
+    print(f"  Kept: {len(fresh_jobs)}/{len(all_jobs)} fresh jobs (removed {stale_count} stale)")
+    all_jobs = fresh_jobs
+    
+    if not all_jobs:
+        print("  No fresh jobs found. Exiting.")
+        return []
     
     # =========================================
     # STEP 3: LLM Extraction (flags only)

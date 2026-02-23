@@ -34,6 +34,7 @@ from src.scoring.engine import apply_hard_filters, score_job, rank_jobs
 from src.emailer import send_email
 from src.utils.dedup import filter_new_jobs
 from src.utils.date_filter import detect_posted_date, is_job_too_old, is_likely_stale
+from src.utils.enrich_descriptions import enrich_thin_descriptions
 from src.utils.config import load_settings
 from src.utils.web_search import search_company_info, clear_cache, get_api_call_count
 
@@ -259,6 +260,12 @@ def run_pipeline(
     if not all_jobs:
         print("  No fresh jobs found. Exiting.")
         return []
+    
+    # =========================================
+    # STEP 2.7: Enrich Thin Descriptions
+    # =========================================
+    print(f"\n[STEP 2.7] Enriching thin job descriptions...")
+    all_jobs = enrich_thin_descriptions(all_jobs)
     
     # =========================================
     # STEP 3: LLM Extraction (flags only)

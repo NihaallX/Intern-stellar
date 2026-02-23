@@ -2,11 +2,13 @@
 LLM-based content parser using Groq.
 Extracts structured flags from job descriptions.
 DOES NOT score jobs - only extracts flags for rule-based scoring.
+
+Uses direct HTTP calls to Groq API to avoid SDK version conflicts.
 """
 
 import json
+import httpx
 from typing import Optional
-from groq import Groq
 
 from src.models import Job, ExtractedFlags, CompanyType, ExperienceLevel
 from src.utils.config import get_groq_api_key, load_settings
@@ -66,32 +68,19 @@ Field definitions:
 - is_onsite_only: Explicitly no remote option"""
 
 
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+
 def extract_flags_with_llm(job: Job) -> Optional[ExtractedFlags]:
     """
     Use Groq LLM to extract structured flags from a job.
     
-    This is the ONLY place where LLM is used.
+    Uses direct HTTP calls to avoid Groq SDK proxy conflicts.
     The LLM does NOT score - it only extracts boolean/enum flags.
     """
     try:
-        import os
         settings = load_settings()
         api_key = get_groq_api_key()
-        
-        # Remove any proxy environment variables that might interfere
-        proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']
-        old_proxies = {}
-        for var in proxy_vars:
-            if var in os.environ:
-                old_proxies[var] = os.environ[var]
-                del os.environ[var]
-        
-        # Initialize Groq client with explicit API key
-        client = Groq(api_key=api_key)
-        
-        # Restore proxy vars
-        for var, value in old_proxies.items():
-            os.environ[var] = value
         
         # Build the prompt
         user_prompt = f"""Parse this job posting:
@@ -109,17 +98,29 @@ Requirements:
 
 Output ONLY the JSON object with extracted flags."""
 
-        response = client.chat.completions.create(
-            model=settings.llm.get("model", "llama-3.3-70b-versatile"),
-            messages=[
+        # Direct HTTP call to Groq API (bypasses SDK proxy issue)
+        payload = {
+            "model": settings.llm.get("model", "llama-3.3-70b-versatile"),
+            "messages": [
                 {"role": "system", "content": EXTRACTION_PROMPT},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0,  # Deterministic
-            max_tokens=settings.llm.get("max_tokens", 1000),
-        )
+            "temperature": 0,
+            "max_tokens": settings.llm.get("max_tokens", 1000),
+        }
         
-        content = response.choices[0].message.content.strip()
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        
+        # Use httpx directly, no proxy interference
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(GROQ_API_URL, json=payload, headers=headers)
+            response.raise_for_status()
+        
+        result = response.json()
+        content = result["choices"][0]["message"]["content"].strip()
         
         # Parse JSON response
         # Handle potential markdown code blocks
@@ -155,6 +156,12 @@ Output ONLY the JSON object with extracted flags."""
         
         return flags
         
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            print(f"[LLM] Rate limited by Groq, using fallback")
+        else:
+            print(f"[LLM] HTTP error {e.response.status_code}: {e.response.text[:200]}")
+        return None
     except Exception as e:
         print(f"[LLM] Error extracting flags: {e}")
         return None
@@ -248,5 +255,6 @@ if __name__ == "__main__":
         """
     )
     
-    result = parse_job_with_llm(test_job)
+    result, used_fb = parse_job_with_llm(test_job)
+    print(f"Used fallback: {used_fb}")
     print(f"Extracted flags: {result.extracted_flags}")

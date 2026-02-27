@@ -4,6 +4,7 @@ Plain text only, engineering report style.
 Sections: Big Tech → APM Track → High Signal AI → Remote/India → Rest
 """
 
+import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -22,10 +23,11 @@ def format_job_entry(job: Job, rank: int) -> str:
     lines = []
     
     # Header with tags
-    tag_str = f"  [{', '.join(job.tags)}]" if job.tags else ""
-    lines.append(f"#{rank}: {job.title}{tag_str}")
-    lines.append(f"    Company: {job.company}")
-    lines.append(f"    Location: {job.location} {'(Remote)' if job.remote else ''}")
+    tags = job.tags or []
+    tag_str = f"  [{', '.join(tags)}]" if tags else ""
+    lines.append(f"#{rank}: {job.title or 'Untitled'}{tag_str}")
+    lines.append(f"    Company: {job.company or 'Unknown'}")
+    lines.append(f"    Location: {job.location or 'Unknown'} {'(Remote)' if job.remote else ''}")
     score_line = f"    Score: {job.score:.1f}/100"
     if job.ai_relevance_score is not None:
         score_line += f"  |  AI Relevance: {job.ai_relevance_score:.0%}"
@@ -68,7 +70,7 @@ def format_job_entry(job: Job, rank: int) -> str:
 
 def _section(jobs: list[Job], tag: str) -> list[Job]:
     """Return jobs that have a given tag, sorted by score desc."""
-    return sorted([j for j in jobs if tag in j.tags], key=lambda j: j.score or 0, reverse=True)
+    return sorted([j for j in jobs if tag in (j.tags or [])], key=lambda j: j.score or 0, reverse=True)
 
 
 def generate_email_body(jobs: list[Job]) -> str:
@@ -88,7 +90,7 @@ def generate_email_body(jobs: list[Job]) -> str:
     from collections import Counter
     all_tags: list[str] = []
     for j in jobs:
-        all_tags.extend(j.tags)
+        all_tags.extend(j.tags or [])
     tag_counts = Counter(all_tags)
     if tag_counts:
         tag_summary = "  |  ".join(f"{t}: {c}" for t, c in tag_counts.most_common(6))
@@ -128,7 +130,7 @@ def generate_email_body(jobs: list[Job]) -> str:
     
     # 🌏 India / Remote
     india_remote = sorted(
-        [j for j in jobs if j.url not in shown_urls and ("India" in j.tags or "Remote" in j.tags)],
+        [j for j in jobs if j.url not in shown_urls and ("India" in (j.tags or []) or "Remote" in (j.tags or []))],
         key=lambda j: j.score or 0, reverse=True
     )
     if india_remote:
@@ -187,9 +189,9 @@ def send_email(
     """
     settings = load_settings()
     
-    # Get recipient
+    # Get recipient — env var overrides settings.yaml
     if recipient is None:
-        recipient = settings.email.get("recipient", "")
+        recipient = os.environ.get("EMAIL_RECIPIENT") or settings.email.get("recipient", "")
     
     if not recipient:
         print("[EMAIL] Error: No recipient specified")

@@ -545,7 +545,7 @@ def compute_ai_relevance_score(job: Job) -> float:
     Returns ratio of matched keywords out of a max ceiling.
     """
     MAX_KEYWORDS = 8  # ceiling for normalization
-    text = f"{job.title} {job.description[:3000]}".lower()
+    text = f"{job.title or ''} {(job.description or '')[:3000]}".lower()
     hits = sum(1 for kw in _AI_DEEP_KEYWORDS if kw in text)
     return round(min(hits / MAX_KEYWORDS, 1.0), 3)
 
@@ -566,9 +566,9 @@ def tag_job(job: Job) -> Job:
     """
     tags = set()
     
-    company_lower = job.company.lower().strip()
-    title_lower = job.title.lower()
-    location_lower = job.location.lower()
+    company_lower = (job.company or "").lower().strip()
+    title_lower = (job.title or "").lower()
+    location_lower = (job.location or "").lower()
     
     # --- Big Tech ---
     if any(bt in company_lower for bt in BIG_TECH_COMPANIES):

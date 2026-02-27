@@ -352,45 +352,64 @@ def run_pipeline(
         return []
     
     # =========================================
-    # STEP 4.5: Company Enrichment (Web Search)
+    # STEP 4.5: Company Enrichment (selective)
     # =========================================
+    # Only enrich companies we're "doubtful" about — i.e. the LLM couldn't determine
+    # company type AND the company isn't already in our known Big Tech / High Signal AI lists.
+    # Known companies (OpenAI, Google, Databricks …) don't need a web lookup.
     tavily_settings = settings.tavily if hasattr(settings, 'tavily') and isinstance(settings.tavily, dict) else {}
     if tavily_settings.get("enabled", False) and tavily_settings.get("enrich_companies", True):
-        max_enrich = tavily_settings.get("max_enrichment_jobs", 30)
-        jobs_to_enrich = filtered_jobs[:max_enrich]
+        from src.scoring.engine import BIG_TECH_COMPANIES, HIGH_SIGNAL_AI_COMPANIES
+        from src.models import CompanyType
+
+        max_enrich = tavily_settings.get("max_enrichment_jobs", 4)
+
+        def _is_doubtful(job: Job) -> bool:
+            """Return True if we genuinely don't know what this company is."""
+            company_lower = (job.company or "").lower().strip()
+            # Already known → skip
+            if any(known in company_lower for known in BIG_TECH_COMPANIES):
+                return False
+            if any(known in company_lower for known in HIGH_SIGNAL_AI_COMPANIES):
+                return False
+            # LLM has a confident answer → skip
+            if job.extracted_flags:
+                if job.extracted_flags.company_type != CompanyType.UNKNOWN:
+                    return False
+                if job.extracted_flags.is_ai_native:  # LLM already confirmed AI-native
+                    return False
+            return True
+
+        doubtful_jobs = [j for j in filtered_jobs if _is_doubtful(j)][:max_enrich]
+        known_count = len(filtered_jobs) - len([j for j in filtered_jobs if _is_doubtful(j)])
+
+        print(f"\n[STEP 4.5] Selective company enrichment:")
+        print(f"  {known_count} companies already known (Big Tech / High Signal AI) → skipped")
+        print(f"  {len(doubtful_jobs)} doubtful companies → will look up (cap: {max_enrich})")
         
-        print(f"\n[STEP 4.5] Enriching companies via web search ({len(jobs_to_enrich)} jobs)...")
-        print(f"  Rate limiting: 1.5s between API calls (be nice to Tavily)")
-        
-        # Clear cache at start of enrichment
         clear_cache()
-        
         enriched_count = 0
         failed_count = 0
-        
-        for i, job in enumerate(jobs_to_enrich):
+
+        for i, job in enumerate(doubtful_jobs):
             try:
+                print(f"  Enriching: {job.company}")
                 enrichment = search_company_info(job.company)
                 if enrichment and (enrichment.employee_count or enrichment.is_ai_company):
                     job.company_enrichment = enrichment
                     enriched_count += 1
-                
-                if (i + 1) % 5 == 0:
-                    print(f"  Progress: {i + 1}/{len(jobs_to_enrich)} companies processed")
+                    print(f"    → {enrichment.employee_count or '?'} employees, "
+                          f"AI-native={enrichment.is_ai_company}, "
+                          f"stage={enrichment.funding_stage or 'unknown'}")
             except Exception as e:
                 failed_count += 1
                 print(f"  ERROR: Failed to enrich {job.company}: {e}")
-        
-        print(f"  ✓ Successfully enriched {enriched_count}/{len(jobs_to_enrich)} companies")
-        if failed_count > 0:
-            print(f"  ⚠ {failed_count} enrichment(s) failed (using fallback data)")
-        
-        # Report API usage
+
         api_calls = get_api_call_count()
-        print(f"  📊 API calls used: {api_calls} (cache saved {len(jobs_to_enrich) - api_calls} calls)")
-        print(f"  💰 Credits used: ~{api_calls} (1000/month free tier)")
+        print(f"  ✓ Enriched {enriched_count}/{len(doubtful_jobs)} doubtful companies")
+        print(f"  📊 Tavily credits used this run: {api_calls + len(filtered_jobs.__class__)} search + {api_calls} enrich")
     else:
-        print("\n[STEP 4.5] Company enrichment disabled (set tavily.enabled=true to enable)")
+        print("\n[STEP 4.5] Company enrichment disabled")
     
     # =========================================
     # STEP 5: Scoring (deterministic)

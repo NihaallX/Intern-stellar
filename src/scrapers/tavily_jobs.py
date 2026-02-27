@@ -187,9 +187,23 @@ def _extract_company(title: str, url: str) -> str:
             parts = url.split("trueup.io/")[1].split("/")
             company = parts[0].replace("-", " ").title() if parts else "Unknown Company"
         elif "wellfound.com/jobs/" in url:
-            parts = url.split("wellfound.com/jobs/")[1].split("-")
-            # wellfound URL format: company-name-job-title-id → extract by splitting at numeric ID
-            company = parts[0].replace("-", " ").title() if parts else "Unknown Company"
+            import re as _re
+            slug = url.split("wellfound.com/jobs/")[1].split("?")[0].rstrip("/")
+            # wellfound URL format: {id}-{job-title-at-company-name}
+            # Strip leading numeric job-ID segment, then look for ' at ' in title first
+            slug_parts = slug.split("-")
+            # Drop leading numeric ID if present
+            if slug_parts and slug_parts[0].isdigit():
+                slug_parts = slug_parts[1:]
+            # Rejoin and look for '-at-' which separates title from company
+            rejoined = "-".join(slug_parts)
+            if "-at-" in rejoined:
+                company = rejoined.split("-at-")[-1].replace("-", " ").title()
+            elif "wellfound.com/company/" in url:
+                co_slug = url.split("wellfound.com/company/")[1].split("/")[0]
+                company = co_slug.replace("-", " ").title()
+            else:
+                company = rejoined.replace("-", " ").title()[:60] if rejoined else "Unknown Company"
         elif "remoterocketship.com/" in url:
             parts = url.rstrip("/").split("/")
             company = parts[-2].replace("-", " ").title() if len(parts) >= 2 else "Unknown Company"

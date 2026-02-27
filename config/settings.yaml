@@ -91,8 +91,8 @@ justremote:
 tavily:
   api_key: ""  # Set via TAVILY_API_KEY environment variable
   enabled: true
-  enrich_companies: true
-  max_enrichment_jobs: 80
+  enrich_companies: true   # Smart: only looks up genuinely unknown companies
+  max_enrichment_jobs: 4   # Hard cap — known companies (OpenAI, Google, etc.) are skipped automatically
 
 # Email configuration
 email:

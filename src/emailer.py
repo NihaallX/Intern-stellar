@@ -1,6 +1,7 @@
 """
 Email sender for job discovery reports.
 Plain text only, engineering report style.
+Sections: Big Tech → APM Track → High Signal AI → Remote/India → Rest
 """
 
 import smtplib
@@ -20,11 +21,15 @@ def format_job_entry(job: Job, rank: int) -> str:
     """
     lines = []
     
-    # Header
-    lines.append(f"#{rank}: {job.title}")
+    # Header with tags
+    tag_str = f"  [{', '.join(job.tags)}]" if job.tags else ""
+    lines.append(f"#{rank}: {job.title}{tag_str}")
     lines.append(f"    Company: {job.company}")
     lines.append(f"    Location: {job.location} {'(Remote)' if job.remote else ''}")
-    lines.append(f"    Score: {job.score:.1f}/100")
+    score_line = f"    Score: {job.score:.1f}/100"
+    if job.ai_relevance_score is not None:
+        score_line += f"  |  AI Relevance: {job.ai_relevance_score:.0%}"
+    lines.append(score_line)
     
     # Company enrichment (if available)
     if job.company_enrichment:
@@ -61,35 +66,105 @@ def format_job_entry(job: Job, rank: int) -> str:
     return "\n".join(lines)
 
 
+def _section(jobs: list[Job], tag: str) -> list[Job]:
+    """Return jobs that have a given tag, sorted by score desc."""
+    return sorted([j for j in jobs if tag in j.tags], key=lambda j: j.score or 0, reverse=True)
+
+
 def generate_email_body(jobs: list[Job]) -> str:
     """
-    Generate the full email body.
+    Generate the full email body with tag-based sections.
+    Order: Big Tech → APM Track → High Signal AI → Remote/India → All Others
     """
     lines = []
     
-    # Header
-    lines.append("=" * 60)
-    lines.append("AI JOB DISCOVERY REPORT")
+    # ── Header ──
+    lines.append("=" * 65)
+    lines.append("AI PM / ENGINEERING JOB DISCOVERY REPORT")
     lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}")
     lines.append(f"Total matches: {len(jobs)}")
-    lines.append("=" * 60)
+    
+    # Tag summary
+    from collections import Counter
+    all_tags: list[str] = []
+    for j in jobs:
+        all_tags.extend(j.tags)
+    tag_counts = Counter(all_tags)
+    if tag_counts:
+        tag_summary = "  |  ".join(f"{t}: {c}" for t, c in tag_counts.most_common(6))
+        lines.append(f"Tags: {tag_summary}")
+    lines.append("=" * 65)
     lines.append("")
     
-    # Jobs
-    for i, job in enumerate(jobs, 1):
-        lines.append(format_job_entry(job, i))
-        lines.append("")
-        lines.append("-" * 40)
-        lines.append("")
+    # Track which jobs were already shown to avoid duplicates
+    shown_urls: set[str] = set()
+    global_rank = 1
     
-    # Footer
+    def emit_section(header: str, section_jobs: list[Job]) -> None:
+        nonlocal global_rank
+        new_jobs = [j for j in section_jobs if j.url not in shown_urls]
+        if not new_jobs:
+            return
+        lines.append("┌" + "─" * 63 + "┐")
+        lines.append(f"│  {header:<61}│")
+        lines.append("└" + "─" * 63 + "┘")
+        lines.append("")
+        for job in new_jobs:
+            lines.append(format_job_entry(job, global_rank))
+            lines.append("")
+            lines.append("  " + "-" * 45)
+            lines.append("")
+            shown_urls.add(job.url)
+            global_rank += 1
+    
+    # 🏆 Big Tech (FAANG / Big AI)
+    emit_section("🏆 BIG TECH  (Google · Meta · Amazon · OpenAI · Anthropic …)", _section(jobs, "Big Tech"))
+    
+    # 📋 APM Track
+    emit_section("📋 APM TRACK  (Associate PM / Entry-level PM roles)", _section(jobs, "APM Track"))
+    
+    # 🤖 High Signal AI
+    emit_section("🤖 HIGH SIGNAL AI  (Top-tier AI-native companies)", _section(jobs, "High Signal AI"))
+    
+    # 🌏 India / Remote
+    india_remote = sorted(
+        [j for j in jobs if j.url not in shown_urls and ("India" in j.tags or "Remote" in j.tags)],
+        key=lambda j: j.score or 0, reverse=True
+    )
+    if india_remote:
+        lines.append("┌" + "─" * 63 + "┐")
+        lines.append(f"│  {'🌏 INDIA / REMOTE':<61}│")
+        lines.append("└" + "─" * 63 + "┘")
+        lines.append("")
+        for job in india_remote:
+            lines.append(format_job_entry(job, global_rank))
+            lines.append("")
+            lines.append("  " + "-" * 45)
+            lines.append("")
+            shown_urls.add(job.url)
+            global_rank += 1
+    
+    # 📌 All Other Matches
+    remaining = [j for j in jobs if j.url not in shown_urls]
+    if remaining:
+        lines.append("┌" + "─" * 63 + "┐")
+        lines.append(f"│  {'📌 ALL OTHER MATCHES':<61}│")
+        lines.append("└" + "─" * 63 + "┘")
+        lines.append("")
+        for job in remaining:
+            lines.append(format_job_entry(job, global_rank))
+            lines.append("")
+            lines.append("  " + "-" * 45)
+            lines.append("")
+            global_rank += 1
+    
+    # ── Footer ──
     lines.append("")
-    lines.append("=" * 60)
+    lines.append("=" * 65)
     lines.append("END OF REPORT")
     lines.append("")
-    lines.append("This is an automated engineering report.")
-    lines.append("System: AI Job Discovery v1.0")
-    lines.append("=" * 60)
+    lines.append("Automated daily AI job discovery. Run: github.com/NihaallX/Intern-stellar")
+    lines.append("=" * 65)
     
     return "\n".join(lines)
 
@@ -124,9 +199,20 @@ def send_email(
     body = generate_email_body(jobs)
     
     # Subject
-    subject_prefix = settings.email.get("subject_prefix", "[AI Jobs]")
+    subject_prefix = settings.email.get("subject_prefix", "[AI PM Jobs]")
     date_str = datetime.now().strftime("%Y-%m-%d")
-    subject = f"{subject_prefix} {len(jobs)} matches - {date_str}"
+    
+    # Count big-tech and APM matches for subject line
+    big_tech_count = sum(1 for j in jobs if "Big Tech" in j.tags)
+    apm_count = sum(1 for j in jobs if "APM Track" in j.tags)
+    
+    subject_parts = [f"{len(jobs)} matches"]
+    if big_tech_count:
+        subject_parts.append(f"{big_tech_count} Big Tech")
+    if apm_count:
+        subject_parts.append(f"{apm_count} APM")
+    
+    subject = f"{subject_prefix} {' | '.join(subject_parts)} - {date_str}"
     
     if dry_run:
         print("\n" + "=" * 60)

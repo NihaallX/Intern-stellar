@@ -43,7 +43,7 @@ def scrape_jobs_with_tavily(max_results: int = 50) -> List[Job]:
             "site:jobs.lever.co intitle:AI engineer OR intitle:ML engineer",
             'site:boards.greenhouse.io intitle:"GenAI" OR intitle:"LLM"',
             'site:jobs.lever.co intitle:"generative AI" OR intitle:"LLM"',
-            # === PM roles ===
+            # === PM roles - Greenhouse / Lever ===
             'site:boards.greenhouse.io intitle:"Product Manager" AI OR ML',
             'site:jobs.lever.co intitle:"Product Manager" AI OR ML',
             'site:boards.greenhouse.io intitle:"Associate Product Manager"',
@@ -61,6 +61,22 @@ def scrape_jobs_with_tavily(max_results: int = 50) -> List[Job]:
             'site:simplify.jobs intitle:AI OR intitle:ML OR intitle:"Product Manager"',
             # === Builtin.com ===
             'site:builtin.com/job "AI" OR "machine learning" OR "product manager" intern OR junior',
+            # === CutShort - strong for India / remote PM roles ===
+            'site:cutshort.io "AI Product Manager" OR "Associate Product Manager" OR "ML Product Manager"',
+            'site:cutshort.io "product manager" AI remote OR India junior OR associate',
+            # === TrueUp - startup / Big Tech hiring tracker ===
+            'site:trueup.io "AI Product Manager" OR "APM" OR "Associate Product Manager"',
+            'site:trueup.io product manager AI OR machine-learning junior',
+            # === AIJobs boards ===
+            'site:aijobs.net "Product Manager" OR "APM" OR "AI PM"',
+            'site:ai-jobs.net "Product Manager" OR "Associate Product Manager"',
+            # === RemoteRocketShip ===
+            'site:remoterocketship.com "AI Product Manager" OR "Associate Product Manager" OR "APM"',
+            # === Wellfound (AngelList) - startups ===
+            'site:wellfound.com/jobs "AI Product Manager" OR "Associate Product Manager" junior',
+            # === Product-specific boards ===
+            'site:productmanagerjobs.co "AI" OR "machine learning" OR "generative"',
+            '"AI Product Manager" OR "APM program" OR "Associate PM" site:ashbyhq.com',
         ]
         
         logger.info(f"Searching for jobs with Tavily across {len(search_queries)} queries")
@@ -164,6 +180,19 @@ def _extract_company(title: str, url: str) -> str:
             company = slug.replace("-", " ").title()
         elif "linkedin.com" in url:
             company = title.split(" hiring ")[0].strip() if " hiring " in title.lower() else "Unknown Company"
+        elif "cutshort.io/" in url:
+            parts = url.split("cutshort.io/")[1].split("/")
+            company = parts[0].replace("-", " ").title() if parts else "Unknown Company"
+        elif "trueup.io/" in url:
+            parts = url.split("trueup.io/")[1].split("/")
+            company = parts[0].replace("-", " ").title() if parts else "Unknown Company"
+        elif "wellfound.com/jobs/" in url:
+            parts = url.split("wellfound.com/jobs/")[1].split("-")
+            # wellfound URL format: company-name-job-title-id → extract by splitting at numeric ID
+            company = parts[0].replace("-", " ").title() if parts else "Unknown Company"
+        elif "remoterocketship.com/" in url:
+            parts = url.rstrip("/").split("/")
+            company = parts[-2].replace("-", " ").title() if len(parts) >= 2 else "Unknown Company"
     
     return company[:100]
 
@@ -174,7 +203,7 @@ def _extract_location(title: str, content: str) -> str:
     
     if "remote" in text:
         return "Remote"
-    elif "san francisco" in text or "sf" in text:
+    elif "san francisco" in text or "sf," in text:
         return "San Francisco, CA"
     elif "new york" in text or "nyc" in text:
         return "New York, NY"
@@ -182,9 +211,25 @@ def _extract_location(title: str, content: str) -> str:
         return "London, UK"
     elif "bangalore" in text or "bengaluru" in text:
         return "Bangalore, India"
+    elif "mumbai" in text:
+        return "Mumbai, India"
+    elif "delhi" in text or "gurgaon" in text or "noida" in text:
+        return "Delhi NCR, India"
+    elif "hyderabad" in text:
+        return "Hyderabad, India"
+    elif "pune" in text:
+        return "Pune, India"
+    elif "india" in text:
+        return "India"
     elif "singapore" in text:
         return "Singapore"
     elif "berlin" in text:
         return "Berlin, Germany"
+    elif "seattle" in text:
+        return "Seattle, WA"
+    elif "austin" in text:
+        return "Austin, TX"
+    elif "boston" in text:
+        return "Boston, MA"
     
     return "Unknown"

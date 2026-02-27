@@ -94,11 +94,14 @@ def _get_api_keys() -> list[str]:
         from src.utils.config import load_env
         load_env()
         primary = os.getenv("GROQ_API_KEY")
-        backup = os.getenv("GROQ_API_KEY_2")
+        backup  = os.getenv("GROQ_API_KEY_2")
+        backup3 = os.getenv("GROQ_API_KEY_3")
         if primary:
             _api_keys.append(primary)
         if backup:
             _api_keys.append(backup)
+        if backup3:
+            _api_keys.append(backup3)
         if not _api_keys:
             raise ValueError("No GROQ_API_KEY found in environment")
         print(f"[LLM] Loaded {len(_api_keys)} API key(s)")

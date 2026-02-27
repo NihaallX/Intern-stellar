@@ -65,6 +65,14 @@ class Job(BaseModel):
     score_breakdown: Optional["ScoreBreakdown"] = None
     why_matched: list[str] = Field(default_factory=list)
     
+    # Role/company tags (populated by scoring engine)
+    # Possible values: "Big Tech", "High Signal AI", "APM Track",
+    #                  "Visa Friendly", "Remote", "India", "Unicorn"
+    tags: list[str] = Field(default_factory=list)
+    
+    # AI relevance score: 0.0–1.0 based on AI keyword density in description
+    ai_relevance_score: Optional[float] = None
+    
     # Deduplication
     job_id: Optional[str] = None  # hash of url or unique identifier
     

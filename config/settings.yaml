@@ -40,7 +40,7 @@ huggingface:
 # Tavily Job Search (bypasses bot detection)
 tavily_jobs:
   enabled: true
-  max_results: 50  # EXPANDED: Now searches 16 queries across Greenhouse, Lever, LinkedIn, Simplify, Builtin, etc.
+  max_results: 80  # EXPANDED: 29 queries across Greenhouse, Lever, CutShort, TrueUp, AIJobs, RemoteRocketShip, Wellfound, Simplify, Builtin, LinkedIn, etc.
 
 # LinkedIn Jobs (via Tavily - bypasses bot detection)
 linkedin:
@@ -97,7 +97,7 @@ tavily:
 # Email configuration
 email:
   recipient: "nihalpardeshi12344@gmail.com"
-  subject_prefix: "[AI Jobs]"
+  subject_prefix: "[AI PM Jobs]"
 
 # LLM configuration (Groq)
 llm:

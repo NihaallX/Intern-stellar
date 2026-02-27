@@ -10,8 +10,10 @@ This is the main orchestration script that:
 """
 
 import argparse
+import csv
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from src.models import Job
 from src.scrapers.hackernews import scrape_hackernews
@@ -37,6 +39,45 @@ from src.utils.date_filter import detect_posted_date, is_job_too_old, is_likely_
 from src.utils.enrich_descriptions import enrich_thin_descriptions
 from src.utils.config import load_settings
 from src.utils.web_search import search_company_info, clear_cache, get_api_call_count
+
+
+def export_csv(jobs: list[Job], output_dir: str = "data") -> str:
+    """
+    Export ranked jobs to a dated CSV file for backup / manual review.
+    Returns the path to the created CSV file.
+    """
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    csv_path = Path(output_dir) / f"jobs_{date_str}.csv"
+    
+    fieldnames = [
+        "rank", "score", "ai_relevance_score", "tags",
+        "title", "company", "location", "remote",
+        "url", "source", "posted_date",
+        "why_matched", "description_preview",
+    ]
+    
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for i, job in enumerate(jobs, 1):
+            writer.writerow({
+                "rank": i,
+                "score": round(job.score or 0, 1),
+                "ai_relevance_score": job.ai_relevance_score or "",
+                "tags": " | ".join(job.tags) if job.tags else "",
+                "title": job.title,
+                "company": job.company,
+                "location": job.location,
+                "remote": job.remote,
+                "url": job.url,
+                "source": job.source,
+                "posted_date": job.posted_date.strftime("%Y-%m-%d") if job.posted_date else "",
+                "why_matched": " | ".join(job.why_matched) if job.why_matched else "",
+                "description_preview": job.description[:200].replace("\n", " "),
+            })
+    
+    return str(csv_path)
 
 
 def run_pipeline(
@@ -373,6 +414,15 @@ def run_pipeline(
     if not ranked_jobs:
         print("  No jobs above threshold. Consider lowering minimum_score.")
         return []
+    
+    # =========================================
+    # STEP 6.5: CSV Backup Export
+    # =========================================
+    try:
+        csv_path = export_csv(ranked_jobs)
+        print(f"\n[STEP 6.5] CSV backup saved: {csv_path}")
+    except Exception as e:
+        print(f"\n[STEP 6.5] CSV export failed (non-fatal): {e}")
     
     # =========================================
     # STEP 7: Email Report

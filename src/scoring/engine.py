@@ -341,6 +341,12 @@ def score_job(job: Job) -> Job:
     job.score = breakdown.total
     job.why_matched = why_matched[:3]  # Limit to 3 reasons
     
+    # Compute AI relevance score (0.0-1.0 keyword density)
+    job.ai_relevance_score = compute_ai_relevance_score(job)
+    
+    # Assign role/company tags
+    job = tag_job(job)
+    
     return job
 
 
@@ -465,6 +471,146 @@ def rank_jobs(jobs: list[Job], min_score: float = 60, top_n: int = 20) -> list[J
     
     # Return top N
     return qualified[:top_n]
+
+
+# =====================================================
+# COMPANY TIERS
+# =====================================================
+
+BIG_TECH_COMPANIES = {
+    # FAANG+ core
+    "google", "deepmind", "google deepmind", "waymo",
+    "meta", "facebook", "instagram",
+    "amazon", "aws", "amazon web services",
+    "apple",
+    "microsoft", "azure", "github", "linkedin",
+    # AI leaders
+    "openai", "anthropic", "mistral", "cohere", "inflection",
+    "google ai", "google brain",
+    # Semiconductors / infra
+    "nvidia", "amd", "intel", "qualcomm",
+    # Fintech / cloud unicorns
+    "stripe", "plaid", "brex",
+    "databricks", "snowflake", "confluent", "mongodb",
+    "palantir", "scale ai", "hugging face", "anyscale",
+    # Ride-hailing / consumer tech
+    "uber", "lyft", "airbnb", "doordash", "instacart",
+    # Other big tech
+    "salesforce", "servicenow", "workday", "oracle",
+    "netflix", "spotify", "adobe", "autodesk",
+    # High-signal AI startups
+    "together ai", "together.ai", "perplexity", "character.ai",
+    "midjourney", "stability ai", "runway", "eleven labs",
+    "cresta", "glean", "writer", "cursor",
+}
+
+HIGH_SIGNAL_AI_COMPANIES = {
+    "openai", "anthropic", "mistral", "cohere", "inflection",
+    "databricks", "scale ai", "hugging face", "anyscale",
+    "together ai", "together.ai", "perplexity", "character.ai",
+    "midjourney", "stability ai", "runway", "eleven labs",
+    "cresta", "glean", "writer", "cursor", "deepmind",
+    "google deepmind",
+}
+
+VISA_FRIENDLY_COMPANIES = {
+    "google", "microsoft", "amazon", "meta", "apple",
+    "nvidia", "salesforce", "oracle", "ibm", "intel",
+    "qualcomm", "adobe", "servicenow", "workday",
+    "uber", "lyft", "airbnb", "databricks", "snowflake",
+    "stripe", "palantir", "openai", "anthropic",
+}
+
+# AI relevance keywords for computing ai_relevance_score
+_AI_DEEP_KEYWORDS = [
+    "llm", "large language model", "gpt", "genai", "generative ai",
+    "rag", "retrieval augmented", "vector database", "embedding",
+    "langchain", "langgraph", "llamaindex", "semantic search",
+    "transformer", "fine-tuning", "reinforcement learning", "rlhf",
+    "prompt engineering", "agents", "agentic", "multi-agent",
+    "diffusion model", "stable diffusion", "text-to-image",
+    "nlp", "natural language processing", "named entity recognition",
+    "hugging face", "pytorch", "tensorflow", "jax",
+    "mlops", "model deployment", "model inference", "model training",
+    "ai infrastructure", "ai platform", "ml platform",
+    "neural network", "deep learning",
+    "openai api", "claude", "llama", "mistral",
+]
+
+
+def compute_ai_relevance_score(job: Job) -> float:
+    """
+    Compute AI keyword density score (0.0 - 1.0).
+    Counts distinct AI keywords found in title + description.
+    Returns ratio of matched keywords out of a max ceiling.
+    """
+    MAX_KEYWORDS = 8  # ceiling for normalization
+    text = f"{job.title} {job.description[:3000]}".lower()
+    hits = sum(1 for kw in _AI_DEEP_KEYWORDS if kw in text)
+    return round(min(hits / MAX_KEYWORDS, 1.0), 3)
+
+
+def tag_job(job: Job) -> Job:
+    """
+    Assign human-readable tags to a job based on company, location, and LLM flags.
+    Tags are used for email section grouping and quick filtering.
+    
+    Possible tags:
+      - "Big Tech"       : company is on the big-tech list
+      - "High Signal AI" : top-tier pure AI company
+      - "APM Track"      : Associate PM / APM program
+      - "Visa Friendly"  : company known to sponsor visas
+      - "Remote"         : remote-ok role
+      - "India"          : India-based or India-remote
+      - "Unicorn"        : well-funded startup (uses company_enrichment)
+    """
+    tags = set()
+    
+    company_lower = job.company.lower().strip()
+    title_lower = job.title.lower()
+    location_lower = job.location.lower()
+    
+    # --- Big Tech ---
+    if any(bt in company_lower for bt in BIG_TECH_COMPANIES):
+        tags.add("Big Tech")
+    
+    # --- High Signal AI ---
+    if any(hs in company_lower for hs in HIGH_SIGNAL_AI_COMPANIES):
+        tags.add("High Signal AI")
+    
+    # --- APM Track ---
+    apm_signals = [
+        "associate product manager", "apm program", "apm track",
+        " apm ", "apm -", "- apm", "junior product manager",
+        "product manager i ", "pm i ", "entry-level product manager",
+        "new grad product manager", "new grad pm",
+    ]
+    if any(sig in f" {title_lower} " for sig in apm_signals):
+        tags.add("APM Track")
+    
+    # --- Visa Friendly ---
+    if any(vf in company_lower for vf in VISA_FRIENDLY_COMPANIES):
+        tags.add("Visa Friendly")
+    
+    # --- Remote ---
+    if job.remote or "remote" in location_lower:
+        tags.add("Remote")
+    
+    # --- India ---
+    india_signals = ["india", "bangalore", "bengaluru", "mumbai", "delhi", "hyderabad", "pune", "chennai"]
+    if any(s in location_lower for s in india_signals):
+        tags.add("India")
+    
+    # --- Unicorn (funded startup) ---
+    if job.company_enrichment:
+        enrich = job.company_enrichment
+        if enrich.funding_stage and enrich.funding_stage.lower() in ["series c", "series d", "series e", "ipo", "unicorn"]:
+            tags.add("Unicorn")
+        if enrich.employee_count and enrich.employee_count < 500 and enrich.is_ai_company:
+            tags.add("High Signal AI")
+    
+    job.tags = sorted(tags)
+    return job
 
 
 if __name__ == "__main__":

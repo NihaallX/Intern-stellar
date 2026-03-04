@@ -91,8 +91,9 @@ justremote:
 tavily:
   api_key: ""  # Set via TAVILY_API_KEY environment variable
   enabled: true
-  enrich_companies: true   # Smart: only looks up genuinely unknown companies
-  max_enrichment_jobs: 4   # Hard cap — known companies (OpenAI, Google, etc.) are skipped automatically
+  enrich_companies: false  # Disabled: 29 search queries alone = 870/month (fits 1000 free tier)
+                           # Enable + set max_enrichment_jobs: 4 if you want it (adds ~120/month)
+  max_enrichment_jobs: 4
 
 # Email configuration
 email:

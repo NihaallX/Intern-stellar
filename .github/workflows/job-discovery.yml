@@ -1,11 +1,11 @@
-name: AI Job Discovery
+name: AI Job Discovery (PAUSED)
 
 on:
-  schedule:
-    # Run daily at 9:00 AM IST = 3:30 AM UTC
-    - cron: '30 3 * * *'
+  # schedule:
+  #   # Run daily at 9:00 AM IST = 3:30 AM UTC
+  #   - cron: '30 3 * * *'
   
-  # Allow manual trigger
+  # Allow manual trigger only (scheduled runs disabled)
   workflow_dispatch:
     inputs:
       dry_run:

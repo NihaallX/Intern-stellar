@@ -203,6 +203,10 @@ def send_email(
         print("[EMAIL] Error: No recipient specified")
         return False
     
+    if not jobs:
+        print("[EMAIL] No jobs to report. Skipping email.")
+        return True
+    
     # Generate email content
     body = generate_email_body(jobs)
     

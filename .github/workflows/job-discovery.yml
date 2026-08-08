@@ -2,7 +2,7 @@ name: AI Job Discovery
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [ main ]
 
   schedule:
     # Run twice weekly at 9:00 UTC on Mondays and Thursdays
@@ -21,6 +21,10 @@ on:
         required: false
         default: 'false'
         type: boolean
+
+concurrency:
+  group: job-discovery-single-run
+  cancel-in-progress: true
 
 jobs:
   discover-jobs:

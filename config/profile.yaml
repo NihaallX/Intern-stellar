@@ -1,0 +1,145 @@
+# Candidate Profile (Ground Truth)
+# This is the canonical reference for relevance scoring.
+
+name: "AI Product Builder — 0-to-1 Shipping, LLM Systems, PRD-to-Production"
+
+summary: |
+  AI Product Builder focused on 0-to-1 shipping, LLM systems, and PRD-to-production execution.
+  Built and shipped healthcare IVR, voice agents, productized automation, and AI workflows end to end.
+  Experience spans ChatMaven.ai AI Product Intern work, Alignerr LLM quality review, and startup product launches.
+  Strong in prompt engineering, rubric evaluation research, user-journey mapping, sprint alignment, and launch execution.
+  Shipped production-adjacent systems across RelayX, Crowd Signal, Khaoozy, and RateMyProf India.
+  Certifications include GoPractice Growth Skills Assessment, EA Product Management simulation, and AWS Educate Introduction to Generative AI.
+  Not a research-first or PhD-track ML profile.
+
+# Core skills to prioritize (high weight)
+priority_skills:
+  - LLM pipelines
+  - LLM
+  - RAG
+  - GraphRAG
+  - ReAct agents
+  - LangGraph
+  - LangChain
+  - agentic workflows
+  - voice agents
+  - healthcare IVR
+  - FastAPI
+  - AWS Lambda
+  - API Gateway
+  - SES
+  - SNS
+  - voice AI
+  - conversational AI
+  - PRD authoring
+  - MVP scoping
+  - product discovery
+  - product management
+  - product strategy
+  - product roadmap
+  - AI product
+  - AI Product Manager
+  - Applied AI Product
+  - GenAI
+
+# Secondary skills (medium weight)
+secondary_skills:
+  - Python
+  - GPT
+  - Claude
+  - Gemini
+  - prompt engineering
+  - rubric evaluation
+  - user-journey mapping
+  - sprint planning
+  - feature prioritization
+  - business alignment
+  - client proposal writing
+  - production deployment
+  - latency optimization
+  - Docker
+  - Kubernetes
+  - Redis
+  - PostgreSQL
+  - NeonDB
+  - WebSockets
+  - real-time systems
+  - data analysis
+  - stakeholder management
+  - user research
+  - A/B testing
+  - metrics
+  - SQL
+  - Figma
+  - Render
+  - Vercel
+  - Razorpay
+  - content moderation
+  - SEO
+  - PageSpeed
+  - PRD
+  - IEEE-style research
+  - GoPractice Growth Skills Assessment
+  - EA Product Management simulation
+  - AWS Educate Introduction to Generative AI
+
+# De-prioritize / Penalize
+deprioritize:
+  - PhD required
+  - research publications required
+  - CV-heavy
+  - computer vision specialist
+  - unpaid
+  - on-site only
+
+# Target role types (EXPANDED)
+target_roles:
+  - AI Product Builder
+  - Founding AI PM
+  - Founding Product Manager
+  - 0-to-1 Product Engineer
+  - Applied AI Product Manager
+  - AI Product
+  - Product Engineer
+  - Product Engineer AI
+  - AI Product Engineer
+  - AI Systems Product Manager
+  # Engineering roles
+  - AI Engineer
+  - Applied AI Engineer
+  - GenAI Engineer
+  - LLM Engineer
+  - AI Systems Engineer
+  - Machine Learning Engineer  # if applied/production-focused
+  - Backend Engineer  # if AI-adjacent
+  - AI Forward Deployed Engineer
+  - Forward Deployed Engineer
+  - Solutions Engineer  # if AI-focused
+  - AI Platform Engineer
+  - ML Platform Engineer
+  - AI Infrastructure Engineer
+  - Full Stack AI Engineer
+  # Product roles
+  - Product Manager
+  - Associate Product Manager
+  - AI Product Manager
+  - Technical Product Manager
+  - Product Manager AI/ML
+  - APM
+  - Junior Product Manager
+  - Product Analyst
+  - Product Operations
+  # Hybrid / Emerging
+  - AI Researcher (Applied)
+  - AI Developer Advocate
+  - Developer Relations Engineer
+  - Technical Program Manager  # if AI-focused
+
+# Experience level
+experience_level: "intern_or_junior"  # intern, junior, 0-2 years
+
+# Location preferences
+location:
+  remote_preferred: true
+  hybrid_acceptable: true
+  onsite_only_acceptable: false

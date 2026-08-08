@@ -1,0 +1,118 @@
+# Pipeline Settings
+
+# Scoring thresholds
+scoring:
+  minimum_score: 35  # Lowered from 40 to capture more opportunities
+  top_n_jobs: 30
+
+# Scoring weights (must sum to 100)
+weights:
+  semantic_similarity: 40  # 0-40 points
+  skill_match: 25          # 0-25 points
+  experience_fit: 15       # 0-15 points
+  company_signal: 10       # 0-10 points
+  penalties: 10            # -10 to +10 points
+
+# Hacker News scraper
+hackernews:
+  enabled: false  # Disabled: produces "Unknown Role" garbage, wastes tokens
+
+# YC Work at a Startup scraper
+ycombinator:
+  enabled: true  # Product-manager role pages from YC startups
+  max_results: 30
+
+# Startup Jobs API/RSS scraper
+startupjobs:
+  enabled: true
+  mode: "rss"  # rss requires no auth; api is optional via a free Startup Jobs account
+  role: "product-manager"
+  workplace: "remote"
+  max_results: 40
+
+# Remotive AI/ML Jobs scraper
+remotive:
+  enabled: false  # 403 Forbidden - strong bot detection
+  max_results: 30
+
+# Wellfound (AngelList) scraper
+wellfound:
+  enabled: false  # 403 Forbidden - strong bot detection
+  max_results: 30
+
+# Hugging Face Jobs scraper
+huggingface:
+  enabled: true  # Using Workable API
+  max_results: 20
+
+# Tavily Job Search (bypasses bot detection)
+tavily_jobs:
+  enabled: false
+  max_results: 80  # EXPANDED: 29 queries across Greenhouse, Lever, CutShort, TrueUp, AIJobs, RemoteRocketShip, Wellfound, Simplify, Builtin, LinkedIn, etc.
+
+# LinkedIn Jobs (via Tavily - bypasses bot detection)
+linkedin:
+  enabled: true
+  max_results: 30  # Searches AI/PM/FDE roles on LinkedIn public listings
+
+# Builtin.com Jobs (via Tavily)
+builtin:
+  enabled: true
+  max_results: 30  # Startup & tech jobs: AI, PM, FDE roles
+
+# Simplify.jobs (via Tavily)
+simplify:
+  enabled: true
+  max_results: 30  # Popular with interns & new grads
+
+# Adzuna Jobs API
+adzuna:
+  enabled: false  # Enable when API credentials added
+  max_results: 50
+
+# Indeed Jobs API (via RapidAPI)
+indeed:
+  enabled: false  # Enable when RapidAPI key added
+  max_results: 50
+
+# We Work Remotely scraper
+weworkremotely:
+  enabled: false  # Direct scraper, may hit rate limits
+  max_results: 30
+
+# RemoteOK scraper (FREE - JSON API)
+remoteok:
+  enabled: true  # Public JSON API, no auth needed!
+  max_results: 50
+
+# Himalayas scraper (FREE)
+himalayas:
+  enabled: false  # 403 Forbidden - bot detection
+  max_results: 50
+
+# JustRemote scraper (FREE)
+justremote:
+  enabled: false  # HTML parsing failing (wrong selectors)
+  max_results: 50
+
+# Tavily Web Search configuration
+tavily:
+  api_key: ""  # Set via TAVILY_API_KEY environment variable
+  enabled: false
+  enrich_companies: true  # Enabled by default: capped at 4 jobs/run to keep Tavily usage within free-tier headroom
+  max_enrichment_jobs: 4
+
+# Email configuration
+email:
+  recipient: "nihalpardeshi12344@gmail.com"
+  subject_prefix: "[AI PM Jobs]"
+
+# LLM configuration (Groq)
+llm:
+  model: "llama-3.3-70b-versatile"
+  temperature: 0  # Deterministic
+  max_tokens: 2000
+
+# Deduplication
+dedup:
+  cache_file: "data/seen_jobs.json"

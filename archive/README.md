@@ -1,0 +1,1 @@
+Archived references: xray.py, target_companies.py, and Companies_100_Roles.xlsx were moved here because they are not wired into the active pipeline; the target-company list was hardcoded instead of reading the spreadsheet, so they are kept only for reference and possible future revival.

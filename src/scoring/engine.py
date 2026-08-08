@@ -1,0 +1,836 @@
+"""
+Deterministic, rule-based scoring engine.
+All scoring is done by code - no LLM scoring.
+"""
+
+from typing import Optional
+from sentence_transformers import SentenceTransformer
+import numpy as np
+
+import logging
+
+from src.models import Job, ExtractedFlags, ScoreBreakdown, CompanyType, ExperienceLevel
+from src.utils.config import get_candidate_summary, load_settings
+from src.llm.nim_client import generate_fit_reason
+
+logger = logging.getLogger(__name__)
+
+
+# Lazy-loaded embedding model
+_embedding_model: Optional[SentenceTransformer] = None
+_candidate_embedding: Optional[np.ndarray] = None
+
+
+def get_embedding_model() -> SentenceTransformer:
+    """Get or initialize the embedding model."""
+    global _embedding_model
+    if _embedding_model is None:
+        print("[SCORING] Loading embedding model...")
+        _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    return _embedding_model
+
+
+def get_candidate_embedding() -> np.ndarray:
+    """Get or compute the candidate profile embedding."""
+    global _candidate_embedding
+    if _candidate_embedding is None:
+        model = get_embedding_model()
+        summary = get_candidate_summary()
+        _candidate_embedding = model.encode(summary)
+    return _candidate_embedding
+
+
+def compute_semantic_similarity(job: Job) -> float:
+    """
+    Compute semantic similarity between job and candidate profile.
+    Returns score in range 0-40.
+    """
+    model = get_embedding_model()
+    candidate_emb = get_candidate_embedding()
+    
+    # Create job embedding from title + description
+    job_text = f"{job.title} {job.description[:2000]}"
+    job_emb = model.encode(job_text)
+    
+    # Cosine similarity
+    similarity = np.dot(candidate_emb, job_emb) / (
+        np.linalg.norm(candidate_emb) * np.linalg.norm(job_emb)
+    )
+    
+    # Scale from [-1, 1] to [0, 40]
+    # Typically similarities are positive, so we map [0, 1] -> [0, 40]
+    scaled_score = max(0, similarity) * 40
+    
+    return round(scaled_score, 2)
+
+
+def compute_skill_match(flags: ExtractedFlags) -> tuple[float, list[str]]:
+    """
+    Compute skill match score based on extracted flags.
+    Returns (score, reasons) where score is in range 0-25.
+    
+    This is DETERMINISTIC - points are assigned by rules.
+    """
+    score = 0.0
+    reasons = []
+    
+    # Priority AI/ML skills (high points) - ONLY AI-specific now
+    if flags.has_llm:
+        score += 7  # Increased from 5
+        reasons.append("LLM experience")
+    
+    if flags.has_rag:
+        score += 6  # Increased from 5
+        reasons.append("RAG systems")
+    
+    if flags.has_agents:
+        score += 6  # Increased from 4
+        reasons.append("Agentic workflows")
+    
+    if flags.has_langchain or flags.has_langgraph:
+        score += 4  # Increased from 3
+        reasons.append("LangChain/LangGraph")
+    
+    if flags.has_voice_ai:
+        score += 4
+        reasons.append("Voice AI experience")
+    
+    # Secondary AI/ML skills
+    if flags.has_fastapi:
+        score += 2
+        reasons.append("FastAPI")
+    
+    if flags.has_aws:
+        score += 2
+        reasons.append("AWS")
+    
+    # REMOVED: has_backend (too generic, matches all software jobs)
+    
+    # Cap at 25
+    return min(score, 25), reasons
+
+
+def compute_experience_fit(flags: ExtractedFlags) -> tuple[float, list[str]]:
+    """
+    Compute experience fit score.
+    Returns (score, reasons) where score is in range 0-15.
+    
+    Candidate is intern/junior level.
+    """
+    score = 0.0
+    reasons = []
+    
+    if flags.experience_level == ExperienceLevel.INTERN:
+        score = 15
+        reasons.append("Intern-level role (perfect fit)")
+    elif flags.experience_level == ExperienceLevel.JUNIOR:
+        score = 15
+        reasons.append("Junior-level role (perfect fit)")
+    elif flags.experience_level == ExperienceLevel.UNKNOWN:
+        score = 10
+        reasons.append("Experience level not specified")
+    elif flags.experience_level == ExperienceLevel.MID:
+        score = 5
+        reasons.append("Mid-level role (stretch)")
+    else:  # SENIOR, LEAD
+        score = 0
+        reasons.append("Senior role (mismatch)")
+    
+    # Check years required
+    if flags.years_required is not None:
+        if flags.years_required <= 2:
+            score = max(score, 12)
+        elif flags.years_required <= 4:
+            score = min(score, 7)
+        else:
+            score = min(score, 2)
+    
+    return score, reasons
+
+
+def compute_company_signal(flags: ExtractedFlags, enrichment=None) -> tuple[float, list[str]]:
+    """
+    Compute company signal score.
+    Returns (score, reasons) where score is in range 0-10.
+    
+    Now enhanced with web-enriched company data.
+    """
+    score = 0.0
+    reasons = []
+    
+    # Use enrichment data if available (more reliable)
+    if enrichment:
+        # Employee count scoring
+        if enrichment.employee_count:
+            if enrichment.employee_count < 200:
+                score = 10
+                reasons.append(f"Startup ({enrichment.employee_count} employees)")
+            elif enrichment.employee_count < 2000:
+                score = 7
+                reasons.append(f"Mid-size ({enrichment.employee_count} employees)")
+            else:
+                score = 4
+                reasons.append(f"Enterprise ({enrichment.employee_count}+ employees)")
+        
+        # AI-native company bonus
+        if enrichment.is_ai_company:
+            score = min(score + 3, 10)
+            reasons.append("AI-native company (verified)")
+        
+        # Funding stage bonus (indicates growth)
+        if enrichment.funding_stage:
+            if enrichment.funding_stage.lower() in ["seed", "series a", "series b"]:
+                score = min(score + 1, 10)
+                reasons.append(f"{enrichment.funding_stage} stage")
+        
+        # Glassdoor rating bonus
+        if enrichment.glassdoor_rating and enrichment.glassdoor_rating >= 4.0:
+            score = min(score + 1, 10)
+            reasons.append(f"High Glassdoor rating ({enrichment.glassdoor_rating})")
+        
+        return score, reasons
+    
+    # Fallback to LLM-extracted flags (less reliable)
+    if flags.company_type == CompanyType.STARTUP:
+        score = 10
+        reasons.append("AI-native startup")
+    elif flags.company_type == CompanyType.MIDSIZE:
+        score = 7
+        reasons.append("Product-focused mid-size company")
+    elif flags.company_type == CompanyType.ENTERPRISE:
+        score = 4
+        reasons.append("Enterprise company")
+    elif flags.company_type == CompanyType.CONSULTING:
+        score = 2
+        reasons.append("Consulting/services")
+    else:
+        score = 5
+        reasons.append("Unknown company type")
+    
+    # Bonus for AI-native
+    if flags.is_ai_native:
+        score = min(score + 2, 10)
+        if "AI-native" not in " ".join(reasons):
+            reasons.append("AI-native company")
+    
+    return score, reasons
+
+
+def compute_penalties(job: Job, flags: ExtractedFlags) -> tuple[float, list[str]]:
+    """
+    Compute penalties and bonuses.
+    Returns (adjustment, reasons) where adjustment is in range -10 to +10.
+    """
+    adjustment = 0.0
+    reasons = []
+    
+    # Penalties
+    if flags.research_heavy:
+        adjustment -= 5
+        reasons.append("Research-heavy focus")
+    
+    if flags.cv_heavy:
+        adjustment -= 4
+        reasons.append("CV-heavy role")
+    
+    if flags.requires_phd:
+        adjustment -= 8
+        reasons.append("PhD required")
+    
+    if flags.requires_publications:
+        adjustment -= 5
+        reasons.append("Publications required")
+    
+    if flags.is_onsite_only:
+        adjustment -= 3
+        reasons.append("On-site only")
+    
+    # Penalize non-AI engineering roles
+    title_lower = job.title.lower()
+    if any(keyword in title_lower for keyword in ["fullstack", "full stack", "full-stack"]):
+        adjustment -= 5
+        reasons.append("Fullstack role (not AI-focused)")
+    
+    if any(keyword in title_lower for keyword in ["mobile", "react native", "ios", "android", "flutter"]):
+        adjustment -= 6
+        reasons.append("Mobile role (not AI-focused)")
+    
+    if any(keyword in title_lower for keyword in ["devops", "sre", "infrastructure", "platform engineer"]):
+        adjustment -= 5
+        reasons.append("DevOps role (not AI-focused)")
+    
+    if any(keyword in title_lower for keyword in ["frontend", "front-end", "ui engineer"]):
+        adjustment -= 6
+        reasons.append("Frontend role (not AI-focused)")
+
+    # Bonuses
+    if job.remote:
+        adjustment += 3
+        reasons.append("Remote-friendly")
+    
+    # ===== PM / FDE ROLE BONUSES =====
+    pm_keywords = [
+        "product manager",
+        "associate product manager",
+        "apm",
+        "technical product manager",
+        "ai product manager",
+        "founding pm",
+    ]
+    if any(kw in title_lower for kw in pm_keywords):
+        adjustment += 5
+        reasons.append("Product Manager role (high relevance)")
+    
+    fde_keywords = ["forward deployed", "solutions engineer", "field engineer"]
+    if any(kw in title_lower for kw in fde_keywords):
+        adjustment += 5
+        reasons.append("Forward Deployed / Solutions Engineer role")
+    
+    devrel_keywords = ["developer relations", "developer advocate", "devrel"]
+    if any(kw in title_lower for kw in devrel_keywords):
+        adjustment += 3
+        reasons.append("DevRel / Advocate role")
+    
+    # Clamp to range
+    adjustment = max(-10, min(10, adjustment))
+    
+    return adjustment, reasons
+
+
+def build_fit_reason(job: Job, flags: ExtractedFlags) -> str:
+    """Create a short, resume-grounded fit explanation for the job."""
+    title = (job.title or "").lower()
+    combined_text = f"{job.title or ''} {job.description or ''}".lower()
+
+    reasons: list[str] = []
+
+    if any(keyword in combined_text for keyword in ["ivr", "voice", "speech", "call center", "contact center"]):
+        reasons.append("matches your healthcare IVR + voice agent work at ChatMaven.ai")
+
+    if any(keyword in combined_text for keyword in ["prd", "roadmap", "feature", "stakeholder", "user journey", "product"]):
+        reasons.append("matches your PRD authoring and sprint alignment background")
+
+    if any(keyword in combined_text for keyword in ["0-to-1", "0 to 1", "founding", "mvp", "launch", "build from scratch"]):
+        reasons.append("matches your 0-to-1 shipping on RelayX, Khaoozy, and RateMyProf India")
+
+    if any(keyword in combined_text for keyword in ["llm", "rag", "graphrag", "langgraph", "agents", "react"]):
+        reasons.append("matches your LLM, RAG, LangGraph, and ReAct agent experience")
+
+    if any(keyword in title for keyword in ["product manager", "product engineer", "product builder", "apm", "technical product"]):
+        reasons.append("fits your AI Product Builder positioning")
+
+    if flags.is_ai_native and not reasons:
+        reasons.append("fits your AI-native product and systems profile")
+
+    if not reasons:
+        return "General fit with your AI Product Builder profile"
+
+    return "; ".join(reasons[:2])
+
+
+def score_job(job: Job) -> Job:
+    """
+    Score a job using the deterministic rule-based system.
+    
+    Pipeline:
+    1. Semantic similarity (0-40)
+    2. Skill match based on flags (0-25)
+    3. Experience fit (0-15)
+    4. Company signal (0-10)
+    5. Penalties/bonuses (-10 to +10)
+    
+    Total: 0-100
+    """
+    if job.extracted_flags is None:
+        logger.warning("No flags for job %s, using defaults", job.title)
+        job.extracted_flags = ExtractedFlags()
+    
+    flags = job.extracted_flags
+    why_matched = []
+    
+    # 1. Semantic similarity
+    similarity_score = compute_semantic_similarity(job)
+    
+    # 2. Skill match
+    skill_score, skill_reasons = compute_skill_match(flags)
+    why_matched.extend(skill_reasons[:2])  # Top 2 reasons
+    
+    # 3. Experience fit
+    exp_score, exp_reasons = compute_experience_fit(flags)
+    if exp_score >= 10:
+        why_matched.extend(exp_reasons[:1])
+    
+    # 4. Company signal (now with enrichment support)
+    company_score, company_reasons = compute_company_signal(
+        flags, 
+        enrichment=job.company_enrichment
+    )
+    if company_score >= 7:
+        why_matched.extend(company_reasons[:1])
+    
+    # 5. Penalties
+    penalty_score, penalty_reasons = compute_penalties(job, flags)
+
+    # Role tier bonus stays outside the clamped penalty bucket so pure PM/APM
+    # roles can outrank hybrid AI-builder roles by a clear margin.
+    role_tier = classify_role_tier(job)
+    role_tier_bonus = ROLE_TIER_BONUSES.get(role_tier, 0)
+    if role_tier == "tier1_pure_pm":
+        why_matched.insert(0, "Tier 1 pure PM/APM role")
+    elif role_tier == "tier2_hybrid_ai_builder":
+        why_matched.insert(0, "Tier 2 hybrid AI-builder role")
+    else:
+        why_matched.insert(0, "Tier 3 AI/ML engineering role")
+
+    seniority_fit_bonus, seniority_reasons = compute_seniority_fit_bonus(job, flags)
+    if seniority_fit_bonus > 0:
+        why_matched.insert(1, "Entry-level/new-grad role fit")
+    elif seniority_fit_bonus < 0:
+        why_matched.insert(1, "Seniority mismatch (downranked)")
+    
+    # Build breakdown
+    breakdown = ScoreBreakdown(
+        similarity=similarity_score,
+        skill_match=skill_score,
+        experience_fit=exp_score,
+        company_signal=company_score,
+        role_tier_bonus=role_tier_bonus,
+        seniority_fit_bonus=seniority_fit_bonus,
+        penalties=penalty_score,
+    )
+    
+    job.score_breakdown = breakdown
+    job.score = breakdown.total
+    job.why_matched = why_matched[:3]  # Limit to 3 reasons
+    # Prefer NIM-generated fit reason (more specific) with fallback to local builder
+    try:
+        profile_summary = get_candidate_summary()
+        nim_reason, nim_source = generate_fit_reason(job.title, job.description, profile_summary, job.url)
+        job.fit_reason = nim_reason
+        if nim_source != 'cache':
+            logger.info('Fit reason generated by %s for %s', nim_source, job.title)
+    except Exception:
+        job.fit_reason = build_fit_reason(job, flags)
+    
+    # Compute AI relevance score (0.0-1.0 keyword density)
+    job.ai_relevance_score = compute_ai_relevance_score(job)
+    
+    # Assign role/company tags
+    job = tag_job(job)
+    
+    return job
+
+
+def apply_hard_filters(job: Job) -> bool:
+    """
+    Apply hard filters to discard jobs early.
+    Returns True if job should be KEPT, False if discarded.
+    """
+    flags = job.extracted_flags
+    
+    if flags is None:
+        return True  # Keep if no flags (will be parsed later)
+    
+    # Hard discard unpaid
+    if flags.is_unpaid:
+        print(f"[FILTER] Discarding unpaid: {job.title}")
+        return False
+    
+    # Hard discard PhD-required (unless explicitly waived)
+    if flags.requires_phd:
+        print(f"[FILTER] Discarding PhD-required: {job.title}")
+        return False
+    
+    # Seniority is now handled as a scoring penalty, not a hard filter.
+
+    # Keep text context for later AI-keyword checks.
+    combined_text = f"{job.title} {job.description}".lower()
+    
+    # Discard non-AI-focused roles even if they mention AI tangentially
+    title_lower = job.title.lower()
+    if any(keyword in title_lower for keyword in ["full-stack", "fullstack", "full stack"]):
+        print(f"[FILTER] Discarding fullstack role (not AI-focused): {job.title}")
+        return False
+    
+    if any(keyword in title_lower for keyword in ["game developer", "game engineer", "game dev"]):
+        print(f"[FILTER] Discarding game dev role: {job.title}")
+        return False
+    
+    if any(keyword in title_lower for keyword in ["designer", "ui engineer", "ux engineer"]):
+        print(f"[FILTER] Discarding designer/UI role: {job.title}")
+        return False
+    
+    # CRITICAL: Require AI/ML/PM/FDE keywords in description or title
+    # This prevents generic roles from passing
+    ai_keywords = [
+        # Engineering
+        'llm', 'large language model', 'gpt', 'genai', 'generative ai',
+        'rag', 'retrieval augmented', 'agentic', 'agent', 'langchain',
+        'machine learning', 'ml engineer', 'ai engineer', 'applied ai',
+        'transformer', 'embedding', 'prompt engineering', 'fine-tuning',
+        'vector database', 'nlp', 'natural language',
+        # PM roles 
+        'ai product manager', 'product manager ai', 'ai pm', 'product management ai',
+        'associate product manager', 'apm', 'product manager - ai', 'pm - ai',
+        'product manager ml', 'product manager machine learning',
+        'technical product manager', 'product manager llm', 'pm genai',
+        'junior product manager',
+        # FDE / Solutions
+        'forward deployed engineer', 'forward deployed', 'solutions engineer ai',
+        'solutions engineer ml', 'field engineer ai',
+        # DevRel
+        'developer relations', 'developer advocate', 'ai advocate',
+        # Platform
+        'ai platform', 'ml platform', 'ai infrastructure',
+    ]
+    
+    has_ai_keyword = any(keyword in combined_text for keyword in ai_keywords)
+    
+    # Also check title specifically for PM/FDE roles
+    pm_fde_titles = [
+        'product manager', 'associate product manager', 'apm',
+        'forward deployed', 'solutions engineer',
+        'developer relations', 'developer advocate',
+        'technical program manager',
+        'product engineer', 'product builder', 'ai product builder',
+        'founding ai pm', 'founding product manager', 'applied ai product',
+        'ai product manager', 'technical product manager',
+    ]
+    has_pm_fde_title = any(keyword in title_lower for keyword in pm_fde_titles)
+    
+    # Also check if job has actual AI flags set
+    has_ai_flags = (
+        flags.has_llm or flags.has_rag or flags.has_agents or 
+        flags.has_langchain or flags.has_langgraph
+    )
+    
+    if not has_ai_keyword and not has_ai_flags and not has_pm_fde_title:
+        print(f"[FILTER] Discarding non-AI role: {job.title}")
+        return False
+    
+    return True
+
+
+def rank_jobs(jobs: list[Job], min_score: float = 60, top_n: int = 20) -> list[Job]:
+    """
+    Rank jobs by score and return top N above threshold.
+    """
+    # Filter by minimum score
+    qualified = [j for j in jobs if j.score is not None and j.score >= min_score]
+    
+    # Sort by score descending
+    qualified.sort(key=lambda j: j.score or 0, reverse=True)
+    
+    # Return top N
+    return qualified[:top_n]
+
+
+# =====================================================
+# COMPANY TIERS
+# =====================================================
+
+BIG_TECH_COMPANIES = {
+    # FAANG+ core
+    "google", "deepmind", "google deepmind", "waymo",
+    "meta", "facebook", "instagram",
+    "amazon", "aws", "amazon web services",
+    "apple",
+    "microsoft", "azure", "github", "linkedin",
+    # AI leaders
+    "openai", "anthropic", "mistral", "cohere", "inflection",
+    "google ai", "google brain",
+    # Semiconductors / infra
+    "nvidia", "amd", "intel", "qualcomm",
+    # Fintech / cloud unicorns
+    "stripe", "plaid", "brex",
+    "databricks", "snowflake", "confluent", "mongodb",
+    "palantir", "scale ai", "hugging face", "anyscale",
+    # Ride-hailing / consumer tech
+    "uber", "lyft", "airbnb", "doordash", "instacart",
+    # Other big tech
+    "salesforce", "servicenow", "workday", "oracle",
+    "netflix", "spotify", "adobe", "autodesk",
+    # High-signal AI startups
+    "together ai", "together.ai", "perplexity", "character.ai",
+    "midjourney", "stability ai", "runway", "eleven labs",
+    "cresta", "glean", "writer", "cursor",
+}
+
+HIGH_SIGNAL_AI_COMPANIES = {
+    "openai", "anthropic", "mistral", "cohere", "inflection",
+    "databricks", "scale ai", "hugging face", "anyscale",
+    "together ai", "together.ai", "perplexity", "character.ai",
+    "midjourney", "stability ai", "runway", "eleven labs",
+    "cresta", "glean", "writer", "cursor", "deepmind",
+    "google deepmind",
+}
+
+VISA_FRIENDLY_COMPANIES = {
+    "google", "microsoft", "amazon", "meta", "apple",
+    "nvidia", "salesforce", "oracle", "ibm", "intel",
+    "qualcomm", "adobe", "servicenow", "workday",
+    "uber", "lyft", "airbnb", "databricks", "snowflake",
+    "stripe", "palantir", "openai", "anthropic",
+}
+
+# AI relevance keywords for computing ai_relevance_score
+_AI_DEEP_KEYWORDS = [
+    "llm", "large language model", "gpt", "genai", "generative ai",
+    "rag", "retrieval augmented", "vector database", "embedding",
+    "langchain", "langgraph", "llamaindex", "semantic search",
+    "transformer", "fine-tuning", "reinforcement learning", "rlhf",
+    "prompt engineering", "agents", "agentic", "multi-agent",
+    "diffusion model", "stable diffusion", "text-to-image",
+    "nlp", "natural language processing", "named entity recognition",
+    "hugging face", "pytorch", "tensorflow", "jax",
+    "mlops", "model deployment", "model inference", "model training",
+    "ai infrastructure", "ai platform", "ml platform",
+    "neural network", "deep learning",
+    "openai api", "claude", "llama", "mistral",
+]
+
+PURE_PM_TITLES = [
+    "product manager",
+    "associate product manager",
+    "apm",
+    "ai product manager",
+    "technical pm",
+    "technical product manager",
+    "founding pm",
+]
+
+HYBRID_AI_BUILDER_TITLES = [
+    "founding ai pm",
+    "ai product builder",
+    "product engineer",
+    "applied ai product",
+]
+
+PURE_AI_ENGINEERING_TITLES = [
+    "ai engineer",
+    "applied ai engineer",
+    "genai engineer",
+    "llm engineer",
+    "machine learning engineer",
+    "ml engineer",
+    "ai systems engineer",
+    "ai platform engineer",
+    "ml platform engineer",
+    "ai infrastructure engineer",
+]
+
+ROLE_TIER_BONUSES = {
+    "tier1_pure_pm": 30,
+    "tier2_hybrid_ai_builder": 12,
+    "tier3_pure_ai_engineering": -5,
+}
+
+ENTRY_LEVEL_SENIORITY_SIGNALS = [
+    "entry level",
+    "entry-level",
+    "new grad",
+    "new graduate",
+    "associate",
+    "intern",
+    "internship",
+    "junior",
+    "apm",
+    "associate product manager",
+    "0-2 years",
+    "0 to 2 years",
+    "0-2 yrs",
+    "0 to 2 yrs",
+    "no experience required",
+]
+
+SENIORITY_PENALTY_SIGNALS = [
+    "senior",
+    "staff",
+    "lead",
+    "principal",
+    "director",
+    "head of",
+    "5+ years",
+    "7+ years",
+    "10+ years",
+]
+
+
+def classify_role_tier(job: Job) -> str:
+    """Classify a job title into one of the prioritized scoring tiers."""
+    title_lower = (job.title or "").lower()
+
+    if any(title == title_lower for title in PURE_PM_TITLES):
+        return "tier1_pure_pm"
+
+    if any(title in title_lower for title in PURE_PM_TITLES) and not any(
+        marker in title_lower for marker in ["ai product builder", "founding ai pm", "product engineer", "applied ai product"]
+    ):
+        return "tier1_pure_pm"
+
+    if any(title in title_lower for title in HYBRID_AI_BUILDER_TITLES):
+        return "tier2_hybrid_ai_builder"
+
+    if any(title in title_lower for title in PURE_AI_ENGINEERING_TITLES):
+        return "tier3_pure_ai_engineering"
+
+    if any(keyword in title_lower for keyword in ["product builder", "product-minded engineer", "0-to-1", "mvp"]):
+        return "tier2_hybrid_ai_builder"
+
+    if any(keyword in title_lower for keyword in ["product manager", "apm", "technical pm", "founding pm"]):
+        return "tier1_pure_pm"
+
+    return "tier3_pure_ai_engineering"
+
+
+def compute_seniority_fit_bonus(job: Job, flags: ExtractedFlags) -> tuple[float, list[str]]:
+    """
+    Score seniority fit as a separate dimension.
+    Positive for entry-level/new-grad roles, negative for senior-heavy roles.
+    """
+    text = f"{job.title or ''} {job.description or ''}".lower()
+    reasons: list[str] = []
+
+    if any(signal in text for signal in SENIORITY_PENALTY_SIGNALS):
+        reasons.append("Seniority mismatch (senior/staff/lead-level role)")
+        return -10.0, reasons
+
+    if flags.experience_level in [ExperienceLevel.SENIOR, ExperienceLevel.LEAD]:
+        reasons.append("Seniority mismatch (LLM-extracted senior role)")
+        return -10.0, reasons
+
+    if flags.years_required is not None and flags.years_required >= 5:
+        reasons.append(f"Seniority mismatch ({flags.years_required}+ years required)")
+        return -10.0, reasons
+
+    bonus = 0.0
+
+    if any(signal in text for signal in ENTRY_LEVEL_SENIORITY_SIGNALS):
+        bonus = max(bonus, 8.0)
+        reasons.append("Entry-level/new-grad signal")
+
+    if flags.experience_level in [ExperienceLevel.INTERN, ExperienceLevel.JUNIOR]:
+        bonus = max(bonus, 8.0)
+        reasons.append("LLM-extracted intern/junior level")
+
+    if flags.years_required is not None and flags.years_required <= 2:
+        bonus = max(bonus, 8.0)
+        reasons.append("0-2 years requirement")
+
+    if bonus > 0:
+        return bonus, reasons
+
+    return 0.0, []
+
+
+def compute_ai_relevance_score(job: Job) -> float:
+    """
+    Compute AI keyword density score (0.0 - 1.0).
+    Counts distinct AI keywords found in title + description.
+    Returns ratio of matched keywords out of a max ceiling.
+    """
+    MAX_KEYWORDS = 8  # ceiling for normalization
+    text = f"{job.title or ''} {(job.description or '')[:3000]}".lower()
+    hits = sum(1 for kw in _AI_DEEP_KEYWORDS if kw in text)
+    return round(min(hits / MAX_KEYWORDS, 1.0), 3)
+
+
+def tag_job(job: Job) -> Job:
+    """
+    Assign human-readable tags to a job based on company, location, and LLM flags.
+    Tags are used for email section grouping and quick filtering.
+    
+    Possible tags:
+      - "Big Tech"       : company is on the big-tech list
+      - "High Signal AI" : top-tier pure AI company
+      - "APM Track"      : Associate PM / APM program
+      - "Visa Friendly"  : company known to sponsor visas
+      - "Remote"         : remote-ok role
+      - "India"          : India-based or India-remote
+      - "Unicorn"        : well-funded startup (uses company_enrichment)
+    """
+    tags = set()
+    
+    company_lower = (job.company or "").lower().strip()
+    title_lower = (job.title or "").lower()
+    location_lower = (job.location or "").lower()
+    
+    # --- Big Tech ---
+    if any(bt in company_lower for bt in BIG_TECH_COMPANIES):
+        tags.add("Big Tech")
+    
+    # --- High Signal AI ---
+    if any(hs in company_lower for hs in HIGH_SIGNAL_AI_COMPANIES):
+        tags.add("High Signal AI")
+    
+    # --- APM Track ---
+    apm_signals = [
+        "associate product manager", "apm program", "apm track",
+        " apm ", "apm -", "- apm", "junior product manager",
+        "product manager i ", "pm i ", "entry-level product manager",
+        "new grad product manager", "new grad pm",
+    ]
+    if any(sig in f" {title_lower} " for sig in apm_signals):
+        tags.add("APM Track")
+
+    # --- AI Product ---
+    ai_product_signals = [
+        "ai product", "applied ai product", "founding ai pm", "founding product manager",
+        "product engineer", "product builder", "0-to-1", "0 to 1", "mvp",
+        "technical product manager", "prd",
+    ]
+    if any(sig in f" {title_lower} " for sig in ai_product_signals):
+        tags.add("AI Product")
+    
+    # --- Visa Friendly ---
+    if any(vf in company_lower for vf in VISA_FRIENDLY_COMPANIES):
+        tags.add("Visa Friendly")
+    
+    # --- Remote ---
+    if job.remote or "remote" in location_lower:
+        tags.add("Remote")
+    
+    # --- India ---
+    india_signals = ["india", "bangalore", "bengaluru", "mumbai", "delhi", "hyderabad", "pune", "chennai"]
+    if any(s in location_lower for s in india_signals):
+        tags.add("India")
+    
+    # --- Unicorn (funded startup) ---
+    if job.company_enrichment:
+        enrich = job.company_enrichment
+        if enrich.funding_stage and enrich.funding_stage.lower() in ["series c", "series d", "series e", "ipo", "unicorn"]:
+            tags.add("Unicorn")
+        if enrich.employee_count and enrich.employee_count < 500 and enrich.is_ai_company:
+            tags.add("High Signal AI")
+    
+    job.tags = sorted(tags)
+    return job
+
+
+if __name__ == "__main__":
+    # Test the scoring engine
+    from src.models import ExtractedFlags
+    
+    test_job = Job(
+        title="AI Engineer",
+        company="AI Startup",
+        url="https://example.com",
+        source="test",
+        description="Build RAG systems with LangChain and FastAPI on AWS.",
+    )
+    
+    test_job.extracted_flags = ExtractedFlags(
+        has_llm=True,
+        has_rag=True,
+        has_langchain=True,
+        has_fastapi=True,
+        has_aws=True,
+        company_type=CompanyType.STARTUP,
+        is_ai_native=True,
+        experience_level=ExperienceLevel.JUNIOR,
+    )
+    
+    scored = score_job(test_job)
+    print(f"Score: {scored.score}")
+    print(f"Breakdown: {scored.score_breakdown}")
+    print(f"Why matched: {scored.why_matched}")

@@ -57,6 +57,7 @@ jobs:
           SMTP_EMAIL: ${{ secrets.SMTP_EMAIL }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
         run: |
           # Build command with optional flags
           CMD="python -m src.main"

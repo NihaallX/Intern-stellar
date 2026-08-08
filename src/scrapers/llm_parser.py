@@ -94,15 +94,12 @@ def _get_api_keys() -> list[str]:
     if not _api_keys:
         from src.utils.config import load_env
         load_env()
-        primary = os.getenv("GROQ_API_KEY")
-        backup  = os.getenv("GROQ_API_KEY_2")
-        backup3 = os.getenv("GROQ_API_KEY_3")
-        if primary:
-            _api_keys.append(primary)
-        if backup:
-            _api_keys.append(backup)
-        if backup3:
-            _api_keys.append(backup3)
+        raw_keys = [os.getenv("GROQ_API_KEY"), os.getenv("GROQ_API_KEY_2"), os.getenv("GROQ_API_KEY_3")]
+        for k in raw_keys:
+            if k and k.strip():
+                clean_k = k.strip().strip("'\"")
+                if clean_k and clean_k not in _api_keys:
+                    _api_keys.append(clean_k)
         if not _api_keys:
             raise ValueError("No GROQ_API_KEY found in environment")
         print(f"[LLM] Loaded {len(_api_keys)} API key(s)")
@@ -172,6 +169,9 @@ def _call_groq_api(payload: dict) -> dict:
                     time.sleep(retry_wait)
                     continue
                 
+                if response.status_code != 200:
+                    print(f"[LLM] Groq API returned status {response.status_code}: {response.text}")
+
                 response.raise_for_status()
                 return response.json()
                 

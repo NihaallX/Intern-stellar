@@ -314,10 +314,13 @@ def run_pipeline(
                 job.posted_date = inferred
                 print(f"  [FRESHNESS] INFERRED date for '{job.title}': {job.posted_date.strftime('%Y-%m-%d')} (NIM/heuristic)")
             else:
-                # No determination — safer to exclude than include
-                stale_count += 1
-                print(f"  [FRESHNESS] EXCLUDE (no parseable date and NIM unable to infer): {job.title} | {job.url}")
-                continue
+                if is_likely_stale(job.title, job.description):
+                    stale_count += 1
+                    print(f"  [FRESHNESS] EXCLUDE (no date & heuristic stale): {job.title} | {job.url}")
+                    continue
+                else:
+                    job.posted_date = now
+                    print(f"  [FRESHNESS] KEEP (scraped today, no explicit date): {job.title}")
 
         # Check if too old by detected date
         if is_job_too_old(job.posted_date):
@@ -543,10 +546,8 @@ Examples:
             max_jobs_per_source=args.max_jobs,
         )
         
-        if jobs:
-            sys.exit(0)
-        else:
-            sys.exit(1)
+        # Successful execution
+        sys.exit(0)
             
     except Exception as e:
         print(f"\n[FATAL ERROR] {e}")

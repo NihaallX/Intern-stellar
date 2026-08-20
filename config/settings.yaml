@@ -109,7 +109,7 @@ email:
 
 # LLM configuration (Groq)
 llm:
-  model: "llama-3.3-70b-versatile"
+  model: "groq/compound-mini"
   temperature: 0  # Deterministic
   max_tokens: 2000
 

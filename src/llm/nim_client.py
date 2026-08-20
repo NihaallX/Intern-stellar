@@ -170,12 +170,12 @@ def infer_posted_date(job_title: str, job_description: str, job_url: str) -> Opt
     _ensure_cache()
     cache = _load_cache(DATE_CACHE)
     key = job_url or (job_title + '|' + (job_description or '')[:100])
-    if key in cache:
+    if key in cache and cache[key] is not None:
         val = cache[key]
         try:
-            return datetime.fromisoformat(val) if val else None
+            return datetime.fromisoformat(val)
         except Exception:
-            return None
+            pass
 
     nim_key = os.environ.get('NIM_API_KEY')
     if nim_key:
@@ -219,34 +219,14 @@ def infer_posted_date(job_title: str, job_description: str, job_url: str) -> Opt
         except Exception as e:
             logger.warning('NIM date infer failed: %s', e)
 
-    # Local heuristic fallback
-    text = f"{job_title or ''} {job_description or ''}".lower()
-    import re
-    now = datetime.now()
-    m = re.search(r'posted\s+(\d+)\s+days?\s+ago', text)
-    if m:
-        d = now - timedelta(days=int(m.group(1)))
+    # Local heuristic fallback using central date detector
+    from src.utils.date_filter import detect_posted_date
+    d = detect_posted_date(job_title or '', job_description or '', job_url or '')
+    if d:
         cache[key] = d.isoformat()
         _save_cache(DATE_CACHE, cache)
         return d
-    m = re.search(r'posted\s+(\d+)\s+weeks?\s+ago', text)
-    if m:
-        d = now - timedelta(weeks=int(m.group(1)))
-        cache[key] = d.isoformat()
-        _save_cache(DATE_CACHE, cache)
-        return d
-    m = re.search(r'(20\d{2})-(\d{2})-(\d{2})', text)
-    if m:
-        try:
-            d = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-            cache[key] = d.isoformat()
-            _save_cache(DATE_CACHE, cache)
-            return d
-        except Exception:
-            pass
 
-    cache[key] = None
-    _save_cache(DATE_CACHE, cache)
     return None
 
 

@@ -50,7 +50,7 @@ def scrape_builtin_jobs(max_results: int = 30) -> List[Job]:
                     search_depth="basic",
                     max_results=5,
                     include_domains=["builtin.com"],
-                    days=45,  # Only recent listings
+                    days=60,  # Only recent listings (2 months max)
                 )
                 
                 for result in response.get("results", []):

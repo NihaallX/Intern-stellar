@@ -161,6 +161,19 @@ def parse_hn_comment(comment: dict) -> Optional[Job]:
     # Build URL
     hn_url = f"https://news.ycombinator.com/item?id={comment.get('objectID', '')}"
     
+    # Extract posted date if available
+    posted_date = None
+    if comment.get("created_at_i"):
+        try:
+            posted_date = datetime.fromtimestamp(comment.get("created_at_i"))
+        except Exception:
+            pass
+    elif comment.get("created_at"):
+        try:
+            posted_date = datetime.fromisoformat(comment.get("created_at").replace("Z", "+00:00"))
+        except Exception:
+            pass
+
     return Job(
         title=title[:100],  # Truncate if needed
         company=company[:100],
@@ -169,6 +182,7 @@ def parse_hn_comment(comment: dict) -> Optional[Job]:
         location=location,
         remote=remote,
         paid=True,  # HN jobs are typically paid
+        posted_date=posted_date,
         description=text[:5000],  # Limit description size
         requirements=[],
     )

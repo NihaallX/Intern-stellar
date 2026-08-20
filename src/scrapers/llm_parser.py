@@ -221,7 +221,7 @@ Requirements:
 Output ONLY the JSON object with extracted flags."""
 
         payload = {
-            "model": settings.llm.get("model", "llama-3.3-70b-versatile"),
+            "model": settings.llm.get("model", "groq/compound-mini"),
             "messages": [
                 {"role": "system", "content": EXTRACTION_PROMPT},
                 {"role": "user", "content": user_prompt}

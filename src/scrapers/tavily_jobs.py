@@ -91,7 +91,7 @@ def scrape_jobs_with_tavily(max_results: int = 50) -> List[Job]:
                     query=query,
                     search_depth="basic",
                     max_results=5,  # Get top 5 per query
-                    days=45,  # Only results from last 45 days
+                    days=60,  # Only results from last 60 days (2 months max)
                 )
                 
                 # Parse results

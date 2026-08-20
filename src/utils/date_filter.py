@@ -12,7 +12,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Maximum age in days for a job to be considered "fresh"
-MAX_JOB_AGE_DAYS = 45  # ~6 weeks
+MAX_JOB_AGE_DAYS = 60  # 2 months max
 
 
 def detect_posted_date(title: str, description: str, url: str) -> Optional[datetime]:
@@ -22,34 +22,34 @@ def detect_posted_date(title: str, description: str, url: str) -> Optional[datet
     Checks for common date patterns in titles, descriptions, and URLs.
     Returns datetime if found, None otherwise.
     """
-    text = f"{title} {description}".lower()
+    text = f"{title} {description} {url}".lower()
     now = datetime.now()
     
-    # Pattern 1: "Posted X days ago"
-    match = re.search(r'posted\s+(\d+)\s+days?\s+ago', text)
+    # Pattern 1: "Posted X days ago" or "X days ago" / "X d ago"
+    match = re.search(r'(?:posted\s+)?(\d+)\s*(?:days?|d)\s+ago', text)
     if match:
         days = int(match.group(1))
         return now - timedelta(days=days)
     
-    # Pattern 2: "Posted X hours ago"
-    match = re.search(r'posted\s+(\d+)\s+hours?\s+ago', text)
+    # Pattern 2: "Posted X hours ago" or "X hours ago" / "X h ago"
+    match = re.search(r'(?:posted\s+)?(\d+)\s*(?:hours?|hrs?|h)\s+ago', text)
     if match:
         hours = int(match.group(1))
         return now - timedelta(hours=hours)
     
-    # Pattern 3: "Posted X weeks ago"
-    match = re.search(r'posted\s+(\d+)\s+weeks?\s+ago', text)
+    # Pattern 3: "Posted X weeks ago" or "X weeks ago" / "X w ago"
+    match = re.search(r'(?:posted\s+)?(\d+)\s*(?:weeks?|wks?|w)\s+ago', text)
     if match:
         weeks = int(match.group(1))
         return now - timedelta(weeks=weeks)
     
-    # Pattern 4: "Posted X months ago"
-    match = re.search(r'posted\s+(\d+)\s+months?\s+ago', text)
+    # Pattern 4: "Posted X months ago" or "X months ago" / "X mo ago"
+    match = re.search(r'(?:posted\s+)?(\d+)\s*(?:months?|mos?)\s+ago', text)
     if match:
         months = int(match.group(1))
         return now - timedelta(days=months * 30)
     
-    # Pattern 5: Explicit dates (Jan 15, 2026 / January 15, 2026 / 2026-01-15)
+    # Month name mapping
     month_names = {
         'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
         'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
@@ -58,29 +58,91 @@ def detect_posted_date(title: str, description: str, url: str) -> Optional[datet
         'october': 10, 'november': 11, 'december': 12,
     }
     
-    # "Month Day, Year" pattern
+    month_regex = r'(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)'
+    
+    # Pattern 5: "Month Day, Year" or "Month Day Year" (e.g. Feb 26th, 2026 / February 26 2026)
     match = re.search(
-        r'(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|'
-        r'jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|'
-        r'dec(?:ember)?)\s+(\d{1,2}),?\s*(\d{4})', text
+        month_regex + r'\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})', text
     )
     if match:
         month = month_names.get(match.group(1))
         day = int(match.group(2))
         year = int(match.group(3))
-        if month and 2024 <= year <= 2027 and 1 <= day <= 31:
+        if month and 2020 <= year <= 2030 and 1 <= day <= 31:
             try:
                 return datetime(year, month, day)
             except ValueError:
                 pass
     
-    # ISO date: "2026-01-15"
-    match = re.search(r'(202[4-7])-(\d{2})-(\d{2})', text)
+    # Pattern 5b: "Day Month Year" (e.g. 26th Feb 2026)
+    match = re.search(
+        r'(\d{1,2})(?:st|nd|rd|th)?\s+' + month_regex + r',?\s*(\d{4})', text
+    )
+    if match:
+        day = int(match.group(1))
+        month = month_names.get(match.group(2))
+        year = int(match.group(3))
+        if month and 2020 <= year <= 2030 and 1 <= day <= 31:
+            try:
+                return datetime(year, month, day)
+            except ValueError:
+                pass
+    
+    # Pattern 6: Month Day WITHOUT year (e.g. "Feb 26", "February 26th", "26 Feb")
+    match = re.search(
+        month_regex + r'\s+(\d{1,2})(?:st|nd|rd|th)?\b', text
+    )
+    if match:
+        month = month_names.get(match.group(1))
+        day = int(match.group(2))
+        if month and 1 <= day <= 31:
+            try:
+                candidate_year = now.year
+                d = datetime(candidate_year, month, day)
+                if d > now:
+                    d = datetime(candidate_year - 1, month, day)
+                return d
+            except ValueError:
+                pass
+    
+    match = re.search(
+        r'\b(\d{1,2})(?:st|nd|rd|th)?\s+' + month_regex + r'\b', text
+    )
+    if match:
+        day = int(match.group(1))
+        month = month_names.get(match.group(2))
+        if month and 1 <= day <= 31:
+            try:
+                candidate_year = now.year
+                d = datetime(candidate_year, month, day)
+                if d > now:
+                    d = datetime(candidate_year - 1, month, day)
+                return d
+            except ValueError:
+                pass
+    
+    # Pattern 7: ISO date: "2026-01-15" or "2026/01/15"
+    match = re.search(r'(202[0-9])[-/](\d{2})[-/](\d{2})', text)
     if match:
         try:
             return datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)))
         except ValueError:
             pass
+    
+    # Pattern 8: Slash date: "02/26/2026" or "26/02/2026"
+    match = re.search(r'\b(\d{1,2})/(\d{1,2})/(202[0-9])\b', text)
+    if match:
+        g1, g2, yr = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        if 1 <= g1 <= 12 and 1 <= g2 <= 31:
+            try:
+                return datetime(yr, g1, g2)
+            except ValueError:
+                pass
+        if 1 <= g2 <= 12 and 1 <= g1 <= 31:
+            try:
+                return datetime(yr, g2, g1)
+            except ValueError:
+                pass
     
     return None
 
@@ -128,3 +190,4 @@ def is_likely_stale(title: str, description: str) -> bool:
         return True
     
     return False
+

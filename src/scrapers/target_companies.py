@@ -130,7 +130,7 @@ def scrape_target_companies(max_results: int = 50) -> List[Job]:
                 query=query,
                 search_depth="basic",
                 max_results=5,
-                days=45,
+                days=60,  # 2 months max
             )
 
             for result in response.get("results", []):

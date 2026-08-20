@@ -106,6 +106,12 @@ def run_pipeline(
     Returns:
         List of scored and ranked jobs
     """
+    if hasattr(sys.stdout, 'reconfigure'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+
     settings = load_settings()
     
     print("=" * 60)
@@ -140,7 +146,7 @@ def run_pipeline(
 
         # Warn if YC returned zero jobs so user knows this source contributed nothing
         if settings.ycombinator.get("enabled", True) and len(yc_jobs) == 0:
-            print("  ⚠ WARNING: YC scraper returned 0 jobs. Check ycombinator scraper or site compatibility.")
+            print("  [WARNING] YC scraper returned 0 jobs. Check ycombinator scraper or site compatibility.")
 
     # StartupJobs (API/RSS)
     if settings.startupjobs.get("enabled", True):

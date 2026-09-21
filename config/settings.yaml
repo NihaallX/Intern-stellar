@@ -30,6 +30,14 @@ startupjobs:
   workplace: "remote"
   max_results: 40
 
+greenhouse:
+  enabled: false
+  max_results: 50
+
+lever:
+  enabled: false
+  max_results: 50
+
 # Remotive AI/ML Jobs scraper
 remotive:
   enabled: false  # 403 Forbidden - strong bot detection
@@ -112,6 +120,7 @@ llm:
   model: "groq/compound-mini"
   temperature: 0  # Deterministic
   max_tokens: 2000
+  max_extraction_jobs: 50  # Hard cap on Groq extraction per run
 
 # Deduplication
 dedup:

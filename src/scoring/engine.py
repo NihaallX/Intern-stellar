@@ -12,6 +12,7 @@ import logging
 from src.models import Job, ExtractedFlags, ScoreBreakdown, CompanyType, ExperienceLevel
 from src.utils.config import get_candidate_summary, load_settings
 from src.llm.nim_client import generate_fit_reason
+from src.utils.role_categories import match_role_category
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,8 @@ logger = logging.getLogger(__name__)
 # Lazy-loaded embedding model
 _embedding_model: Optional[SentenceTransformer] = None
 _candidate_embedding: Optional[np.ndarray] = None
+
+
 
 
 def get_embedding_model() -> SentenceTransformer:
@@ -387,6 +390,17 @@ def score_job(job: Job) -> Job:
         why_matched.insert(1, "Entry-level/new-grad role fit")
     elif seniority_fit_bonus < 0:
         why_matched.insert(1, "Seniority mismatch (downranked)")
+
+    role_category = match_role_category(job.title)
+    role_category_bonus = {
+        "solutions": 7.0,
+        "product_management": 6.0,
+        "product_ops_strategy": 4.0,
+        "technical_program": 4.0,
+    }.get(role_category, 0.0)
+    job.role_category = role_category
+    if role_category:
+        why_matched.insert(0, f"Role category: {role_category.replace('_', ' ')}")
     
     # Build breakdown
     breakdown = ScoreBreakdown(
@@ -395,6 +409,7 @@ def score_job(job: Job) -> Job:
         experience_fit=exp_score,
         company_signal=company_score,
         role_tier_bonus=role_tier_bonus,
+        role_category_bonus=role_category_bonus,
         seniority_fit_bonus=seniority_fit_bonus,
         penalties=penalty_score,
     )

@@ -31,6 +31,31 @@ _last_call_time: float = 0
 _api_keys: list[str] = []
 _current_key_index: int = 0
 
+# Track LLM parsing fallback statistics
+_fallback_count: int = 0
+_total_parsed_count: int = 0
+_prompt_tokens: int = 0
+_completion_tokens: int = 0
+
+
+def reset_fallback_stats() -> None:
+    """Reset global LLM parsing fallback counter statistics."""
+    global _fallback_count, _total_parsed_count, _prompt_tokens, _completion_tokens
+    _fallback_count = 0
+    _total_parsed_count = 0
+    _prompt_tokens = 0
+    _completion_tokens = 0
+
+
+def get_fallback_stats() -> tuple[int, int]:
+    """Return tuple of (fallback_count, total_parsed_count)."""
+    return _fallback_count, _total_parsed_count
+
+
+def get_token_usage() -> tuple[int, int]:
+    return _prompt_tokens, _completion_tokens
+
+
 # System prompt for structured extraction
 EXTRACTION_PROMPT = """You are a job posting parser. Extract structured information from job descriptions.
 
@@ -232,6 +257,10 @@ Output ONLY the JSON object with extracted flags."""
         
         # Call with rate limiting, retry, and key rotation
         result = _call_groq_api(payload)
+        usage = result.get("usage", {})
+        global _prompt_tokens, _completion_tokens
+        _prompt_tokens += int(usage.get("prompt_tokens", 0) or 0)
+        _completion_tokens += int(usage.get("completion_tokens", 0) or 0)
         content = result["choices"][0]["message"]["content"].strip()
         
         # Parse JSON response
@@ -333,6 +362,9 @@ def parse_job_with_llm(job: Job, use_fallback: bool = True) -> tuple[Job, bool]:
     Returns:
         tuple[Job, bool]: (parsed job, whether fallback was used)
     """
+    global _fallback_count, _total_parsed_count
+    _total_parsed_count += 1
+
     # Try LLM extraction first
     flags = extract_flags_with_llm(job)
     used_fallback = False
@@ -341,6 +373,7 @@ def parse_job_with_llm(job: Job, use_fallback: bool = True) -> tuple[Job, bool]:
         print(f"[LLM] Using fallback parser for: {job.title}")
         flags = extract_flags_fallback(job)
         used_fallback = True
+        _fallback_count += 1
     
     job.extracted_flags = flags
     return job, used_fallback

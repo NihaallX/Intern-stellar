@@ -6,16 +6,26 @@ NIM client wrapper for two auxiliary agents:
 Implements real HTTP integration with NVIDIA NIM (OpenAI-compatible chat endpoint).
 If `NIM_API_KEY` is not present or a network call fails, falls back to local heuristics.
 Responses and model lists are cached under `data/` to avoid repeated network calls.
+
+Cache writes use atomic write (tmp → os.replace) + a threading.Lock to avoid the
+Windows [Errno 13] Permission denied errors that occur when score_job() is called in
+a tight loop and multiple threads attempt to open the same cache file concurrently.
 """
 import os
 import json
 import logging
+import threading
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Module-level lock: ensures only one thread reads/writes any cache file at a time.
+# This prevents Windows file-locking errors (Errno 13) when score_job() is called
+# rapidly across many jobs while sentence_transformers background threads are active.
+_cache_lock = threading.Lock()
 
 # Read NIM key at import time and expose for checks
 NIM_API_KEY = os.environ.get('NIM_API_KEY')
@@ -38,6 +48,16 @@ NIM_CHAT_URL = f"{NIM_BASE}/chat/completions"
 
 # HTTP settings
 NIM_TIMEOUT = 8.0
+_token_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+
+
+def reset_token_usage() -> None:
+    _token_usage["prompt_tokens"] = 0
+    _token_usage["completion_tokens"] = 0
+
+
+def get_token_usage() -> tuple[int, int]:
+    return _token_usage["prompt_tokens"], _token_usage["completion_tokens"]
 
 
 def _ensure_cache() -> None:
@@ -61,11 +81,24 @@ def _load_cache(path: str) -> dict:
 
 
 def _save_cache(path: str, data: dict) -> None:
+    """
+    Atomic write: serialize to a .tmp file then os.replace() into place.
+    os.replace() is atomic on NTFS and avoids the Windows [Errno 13] Permission
+    denied error that occurs when open(path, 'w') races with another open handle.
+    """
+    tmp = path + '.tmp'
     try:
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
     except Exception as e:
         logger.warning('Failed to write cache %s: %s', path, e)
+        # Clean up orphaned temp file if replace failed
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
 
 
 def _get_nim_models(nim_key: str | None = None) -> list:
@@ -168,16 +201,21 @@ def _extract_content_from_nim(raw: dict) -> Optional[str]:
 def infer_posted_date(job_title: str, job_description: str, job_url: str) -> Optional[datetime]:
     """Try NIM first to infer a posted date, fall back to heuristics and cache."""
     _ensure_cache()
-    cache = _load_cache(DATE_CACHE)
     key = job_url or (job_title + '|' + (job_description or '')[:100])
-    if key in cache and cache[key] is not None:
-        val = cache[key]
-        try:
-            return datetime.fromisoformat(val)
-        except Exception:
-            pass
+
+    # Check cache under lock
+    with _cache_lock:
+        cache = _load_cache(DATE_CACHE)
+        if key in cache and cache[key] is not None:
+            val = cache[key]
+            try:
+                return datetime.fromisoformat(val)
+            except Exception:
+                pass
 
     nim_key = os.environ.get('NIM_API_KEY')
+    result_date: Optional[datetime] = None
+
     if nim_key:
         try:
             models = _get_nim_models(nim_key)
@@ -199,6 +237,9 @@ def infer_posted_date(job_title: str, job_description: str, job_url: str) -> Opt
             }
 
             raw = _call_nim_chat(body, nim_key)
+            usage = raw.get("usage", {}) if isinstance(raw, dict) else {}
+            _token_usage["prompt_tokens"] += int(usage.get("prompt_tokens", 0) or 0)
+            _token_usage["completion_tokens"] += int(usage.get("completion_tokens", 0) or 0)
             try:
                 _save_cache(NIM_RAW_RESP, {"date": raw})
             except Exception:
@@ -210,35 +251,41 @@ def infer_posted_date(job_title: str, job_description: str, job_url: str) -> Opt
                     parsed = json.loads(content)
                     pd = parsed.get('posted_date')
                     if pd:
-                        d = datetime.fromisoformat(pd)
-                        cache[key] = d.isoformat()
-                        _save_cache(DATE_CACHE, cache)
-                        return d
+                        result_date = datetime.fromisoformat(pd)
                 except Exception:
                     logger.debug('NIM date content not JSON: %s', content)
         except Exception as e:
             logger.warning('NIM date infer failed: %s', e)
 
     # Local heuristic fallback using central date detector
-    from src.utils.date_filter import detect_posted_date
-    d = detect_posted_date(job_title or '', job_description or '', job_url or '')
-    if d:
-        cache[key] = d.isoformat()
-        _save_cache(DATE_CACHE, cache)
-        return d
+    if result_date is None:
+        from src.utils.date_filter import detect_posted_date
+        result_date = detect_posted_date(job_title or '', job_description or '', job_url or '')
 
-    return None
+    if result_date is not None:
+        with _cache_lock:
+            cache = _load_cache(DATE_CACHE)
+            cache[key] = result_date.isoformat()
+            _save_cache(DATE_CACHE, cache)
+
+    return result_date
 
 
 def generate_fit_reason(job_title: str, job_description: str, profile_summary: str, job_url: str) -> Tuple[str, str]:
     """Generate concise 1-2 sentence fit reason using NIM if available, else heuristic."""
     _ensure_cache()
-    cache = _load_cache(FIT_CACHE)
     key = job_url or (job_title + '|' + (job_description or '')[:100])
-    if key in cache and cache[key]:
-        return cache[key], 'cache'
+
+    # Check cache under lock
+    with _cache_lock:
+        cache = _load_cache(FIT_CACHE)
+        if key in cache and cache[key]:
+            return cache[key], 'cache'
 
     nim_key = os.environ.get('NIM_API_KEY')
+    result_reason: Optional[str] = None
+    result_source = 'heuristic'
+
     if nim_key:
         try:
             models = _get_nim_models(nim_key)
@@ -262,6 +309,9 @@ def generate_fit_reason(job_title: str, job_description: str, profile_summary: s
             }
 
             raw = _call_nim_chat(body, nim_key)
+            usage = raw.get("usage", {}) if isinstance(raw, dict) else {}
+            _token_usage["prompt_tokens"] += int(usage.get("prompt_tokens", 0) or 0)
+            _token_usage["completion_tokens"] += int(usage.get("completion_tokens", 0) or 0)
             try:
                 _save_cache(NIM_RAW_RESP, {'fit': raw})
             except Exception:
@@ -269,26 +319,30 @@ def generate_fit_reason(job_title: str, job_description: str, profile_summary: s
 
             content = _extract_content_from_nim(raw)
             if content:
-                reason = content.strip()
-                cache[key] = reason
-                _save_cache(FIT_CACHE, cache)
-                return reason, 'nim'
+                result_reason = content.strip()
+                result_source = 'nim'
         except Exception as e:
             logger.warning('NIM fit generation failed: %s', e)
 
     # Heuristic fallback
-    text = f"{job_title or ''} {job_description or ''}".lower()
-    reasons = []
-    if any(k in text for k in ["ivr", "voice", "speech", "call center", "contact center"]):
-        reasons.append("matches your healthcare IVR + voice agent work")
-    if any(k in text for k in ["prd", "roadmap", "feature", "stakeholder", "user journey", "product"]):
-        reasons.append("matches your PRD authoring and sprint alignment background")
-    if any(k in text for k in ["0-to-1", "0 to 1", "founding", "mvp", "launch"]):
-        reasons.append("matches your 0-to-1 shipping experience")
-    if any(k in text for k in ["llm", "rag", "langgraph", "agents", "react"]):
-        reasons.append("matches your LLM, RAG, LangGraph, and ReAct agent experience")
+    if result_reason is None:
+        text = f"{job_title or ''} {job_description or ''}".lower()
+        reasons = []
+        if any(k in text for k in ["ivr", "voice", "speech", "call center", "contact center"]):
+            reasons.append("matches your healthcare IVR + voice agent work")
+        if any(k in text for k in ["prd", "roadmap", "feature", "stakeholder", "user journey", "product"]):
+            reasons.append("matches your PRD authoring and sprint alignment background")
+        if any(k in text for k in ["0-to-1", "0 to 1", "founding", "mvp", "launch"]):
+            reasons.append("matches your 0-to-1 shipping experience")
+        if any(k in text for k in ["llm", "rag", "langgraph", "agents", "react"]):
+            reasons.append("matches your LLM, RAG, LangGraph, and ReAct agent experience")
+        result_reason = reasons[0] if reasons else "General fit with your AI Product Builder profile"
+        result_source = 'heuristic'
 
-    reason = reasons[0] if reasons else "General fit with your AI Product Builder profile"
-    cache[key] = reason
-    _save_cache(FIT_CACHE, cache)
-    return reason, 'heuristic'
+    # Persist to cache under lock (atomic write)
+    with _cache_lock:
+        cache = _load_cache(FIT_CACHE)
+        cache[key] = result_reason
+        _save_cache(FIT_CACHE, cache)
+
+    return result_reason, result_source

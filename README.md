@@ -4,6 +4,8 @@ A deterministic, read-only AI job discovery system that scrapes, scores, and ema
 
 ## Features
 - **Multi-source scraping**: Hacker News, X-Ray Search (Greenhouse, Lever, Ashby, Workable, etc.)
+- **Public job boards**: Optional Greenhouse and Lever board scrapers driven by configurable company lists
+- **Role categories**: Product Management, Solutions, Product Ops/Strategy, and Technical Program roles
 - **Web-enriched company data**: Real-time verification via Tavily API (employee count, funding, AI-native status)
 - **Deterministic scoring**: LLM for parsing only, all scoring is rule-based
 - **Plain-text email reports**: Top 20 ranked jobs with explanations
@@ -28,6 +30,15 @@ python -m src.main
 ## Configuration
 - `config/profile.yaml`: Candidate profile (skills, experience)
 - `config/settings.yaml`: Pipeline settings (thresholds, sources, Tavily API)
+- `config/role_categories.yaml`: Data-driven title lists and role-category priorities
+
+Optional public-board sources can be enabled in `config/settings.yaml`:
+```yaml
+greenhouse:
+  enabled: false
+lever:
+  enabled: false
+```
 
 ## New: Company Enrichment
 Enable web search for verified company data (see [TAVILY_INTEGRATION.md](TAVILY_INTEGRATION.md)):

@@ -15,7 +15,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from src.models import Job
+from src.models import Job, ExtractedFlags
 from src.scrapers.hackernews import scrape_hackernews
 from src.scrapers.ycombinator import scrape_ycombinator_jobs
 from src.scrapers.remotive import scrape_remotive_jobs
@@ -32,7 +32,9 @@ from src.scrapers.justremote import scrape_justremote_jobs
 from src.scrapers.linkedin import scrape_linkedin_jobs
 from src.scrapers.builtin import scrape_builtin_jobs
 from src.scrapers.simplify import scrape_simplify_jobs
-from src.scrapers.llm_parser import parse_job_with_llm
+from src.scrapers.greenhouse import scrape_greenhouse_jobs
+from src.scrapers.lever import scrape_lever_jobs
+from src.scrapers.llm_parser import parse_job_with_llm, reset_fallback_stats, get_fallback_stats, get_token_usage
 from src.scoring.engine import apply_hard_filters, score_job, rank_jobs
 from src.emailer import send_email
 from src.utils.dedup import filter_new_jobs
@@ -40,6 +42,7 @@ from src.utils.date_filter import detect_posted_date, is_job_too_old, is_likely_
 from src.utils.enrich_descriptions import enrich_thin_descriptions
 from src.utils.config import load_settings
 from src.utils.web_search import search_company_info, clear_cache, get_api_call_count
+from src.utils.role_categories import match_role_category
 
 
 def export_csv(jobs: list[Job], output_dir: str = "data") -> str:
@@ -53,6 +56,7 @@ def export_csv(jobs: list[Job], output_dir: str = "data") -> str:
     fieldnames = [
         "run_date", "rank", "score", "ai_relevance_score", "tags",
         "title", "company", "location", "remote",
+        "role_category",
         "url", "source", "posted_date",
         "fit_reason", "why_matched", "description_preview",
     ]
@@ -77,6 +81,7 @@ def export_csv(jobs: list[Job], output_dir: str = "data") -> str:
                 "company": job.company,
                 "location": job.location,
                 "remote": job.remote,
+                "role_category": job.role_category or "",
                 "url": job.url,
                 "source": job.source,
                 "posted_date": job.posted_date.strftime("%Y-%m-%d") if job.posted_date else "",
@@ -159,6 +164,22 @@ def run_pipeline(
             print(f"  - StartupJobs: {len(sj_jobs)} jobs")
         except Exception as e:
             print(f"  - StartupJobs: Error - {e}")
+
+    if settings.greenhouse.get("enabled", False):
+        try:
+            gh_jobs = scrape_greenhouse_jobs(max_results=settings.greenhouse.get("max_results", 50))
+            all_jobs.extend(gh_jobs)
+            print(f"  - Greenhouse: {len(gh_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Greenhouse: Error - {e}")
+
+    if settings.lever.get("enabled", False):
+        try:
+            lever_jobs = scrape_lever_jobs(max_results=settings.lever.get("max_results", 50))
+            all_jobs.extend(lever_jobs)
+            print(f"  - Lever: {len(lever_jobs)} jobs")
+        except Exception as e:
+            print(f"  - Lever: Error - {e}")
     
     # Remotive AI/ML
     if settings.remotive.get("enabled", True):
@@ -226,7 +247,10 @@ def run_pipeline(
     # RemoteOK (free JSON API)
     if settings.remoteok.get("enabled", False):
         try:
-            ro_jobs = scrape_remoteok_jobs(max_results=settings.remoteok.get("max_results", 50))
+            ro_jobs = scrape_remoteok_jobs(
+                max_results=settings.remoteok.get("max_results", 50),
+                requested_tags=settings.remoteok.get("tags", ["product", "solutions", "program", "operations", "strategy", "ai"]),
+            )
             all_jobs.extend(ro_jobs)
             print(f"  - RemoteOK: {len(ro_jobs)} jobs")
         except Exception as e:
@@ -360,13 +384,24 @@ def run_pipeline(
     # =========================================
     # STEP 3: LLM Extraction (flags only)
     # =========================================
-    print(f"\n[STEP 3] Extracting flags with LLM ({len(all_jobs)} jobs)...")
+    category_jobs = [job for job in all_jobs if match_role_category(job.title)]
+    skipped_category = len(all_jobs) - len(category_jobs)
+    max_extract = settings.llm.get("max_extraction_jobs", 50)
+    category_jobs.sort(key=lambda job: job.posted_date or datetime.min, reverse=True)
+    if len(category_jobs) > max_extract:
+        print(f"  WARNING: {len(category_jobs)} category-matched jobs exceed extraction cap {max_extract}; truncating newest-first")
+    extraction_jobs = category_jobs[:max_extract]
+    extraction_ids = {id(job) for job in extraction_jobs}
+    print(f"\n[STEP 3] Extracting flags with LLM ({len(extraction_jobs)} jobs; skipped {skipped_category} title-mismatched jobs)...")
     
     # Track LLM vs fallback usage
+    reset_fallback_stats()
+    from src.llm.nim_client import reset_token_usage, get_token_usage as get_nim_token_usage
+    reset_token_usage()
     llm_success_count = 0
     fallback_count = 0
     
-    for i, job in enumerate(all_jobs):
+    for i, job in enumerate(extraction_jobs):
         try:
             job, used_fallback = parse_job_with_llm(job, use_fallback=True)
             if used_fallback:
@@ -378,6 +413,14 @@ def run_pipeline(
                 print(f"  Parsed {i + 1}/{len(all_jobs)}")
         except Exception as e:
             print(f"  Error parsing {job.title}: {e}")
+
+    for job in all_jobs:
+        if id(job) not in extraction_ids:
+            job.extracted_flags = ExtractedFlags()
+
+    groq_prompt, groq_completion = get_token_usage()
+    nim_prompt, nim_completion = get_nim_token_usage()
+    print(f"  Token usage — Groq: prompt={groq_prompt}, completion={groq_completion}; NIM fallback: prompt={nim_prompt}, completion={nim_completion}")
     
     # Report extraction method used
     print(f"\n  📊 EXTRACTION REPORT:")
@@ -493,6 +536,14 @@ def run_pipeline(
     print("PIPELINE COMPLETE")
     print(f"Finished: {datetime.now().isoformat()}")
     print(f"Results: {len(ranked_jobs)} jobs ready")
+    
+    # Check LLM fallback rate warning (>20%)
+    fb_cnt, total_parsed_cnt = get_fallback_stats()
+    if total_parsed_cnt > 0:
+        fb_rate = fb_cnt / total_parsed_cnt
+        if fb_rate > 0.20:
+            print(f"⚠️ LLM FALLBACK RATE HIGH: {fb_rate * 100:.1f}% of jobs parsed via regex — check GROQ_API_KEY health")
+
     print("=" * 60)
     
     # Print top 5 for quick preview

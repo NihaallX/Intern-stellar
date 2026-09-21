@@ -27,6 +27,8 @@ def format_job_entry(job: Job, rank: int) -> str:
     tag_str = f"  [{', '.join(tags)}]" if tags else ""
     lines.append(f"#{rank}: {job.title or 'Untitled'}{tag_str}")
     lines.append(f"    Company: {job.company or 'Unknown'}")
+    if job.role_category:
+        lines.append(f"    Role category: {job.role_category.replace('_', ' ')}")
     lines.append(f"    Location: {job.location or 'Unknown'} {'(Remote)' if job.remote else ''}")
     score_line = f"    Score: {job.score:.1f}/100"
     if job.ai_relevance_score is not None:

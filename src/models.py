@@ -36,6 +36,7 @@ class Job(BaseModel):
     # Core fields (required)
     title: str
     company: str
+    role_category: Optional[str] = None
     url: str
     source: str  # e.g., "hackernews", "greenhouse", "lever"
     
@@ -144,6 +145,7 @@ class ScoreBreakdown(BaseModel):
     experience_fit: float = 0.0  # 0-15 points
     company_signal: float = 0.0  # 0-10 points
     role_tier_bonus: float = 0.0 # role-priority bonus
+    role_category_bonus: float = 0.0 # data-driven category bonus
     seniority_fit_bonus: float = 0.0 # entry-level vs seniority fit bonus
     penalties: float = 0.0       # -10 to +10 points
     
@@ -155,6 +157,7 @@ class ScoreBreakdown(BaseModel):
             self.experience_fit +
             self.company_signal +
             self.role_tier_bonus +
+            self.role_category_bonus +
             self.seniority_fit_bonus +
             self.penalties
         )
@@ -194,6 +197,8 @@ class PipelineSettings(BaseModel):
     huggingface: dict = Field(default_factory=dict)
     tavily_jobs: dict = Field(default_factory=dict)
     startupjobs: dict = Field(default_factory=dict)
+    greenhouse: dict = Field(default_factory=dict)
+    lever: dict = Field(default_factory=dict)
     adzuna: dict = Field(default_factory=dict)
     indeed: dict = Field(default_factory=dict)
     weworkremotely: dict = Field(default_factory=dict)
@@ -207,3 +212,4 @@ class PipelineSettings(BaseModel):
     email: dict = Field(default_factory=dict)
     llm: dict = Field(default_factory=dict)
     dedup: dict = Field(default_factory=dict)
+    role_categories: dict = Field(default_factory=dict)

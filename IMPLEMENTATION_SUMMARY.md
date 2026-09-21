@@ -1,269 +1,103 @@
-# Tavily Web Search Integration - Summary
+# Tavily Web Search Integration — Implementation Summary
 
-## ✅ Implementation Complete
+## Current implementation
 
-Successfully integrated **Tavily API** for real-time web search with production-ready improvements:
-- ✅ Company enrichment
-- ✅ Enhanced scoring
-- ✅ Better email reports
-- ✅ **Error handling** - Graceful fallbacks, no silent failures
-- ✅ **Caching** - Avoid duplicate API calls per run
-- ✅ **Rate limiting** - 1.5s delay between calls
+The project includes optional Tavily-powered company enrichment and Tavily-backed job sources.
 
----
+### Company enrichment
 
-## 📦 What Was Added
+When enabled, the pipeline runs company enrichment at Step 4.5, after hard filtering and before scoring. Enrichment can provide employee count, funding stage, AI-company status, recent result titles, a company description, and detected technology keywords.
 
-### New Files
-1. **`src/utils/web_search.py`** (267 lines)
-   - `search_company_info()` - Fetch company data via Tavily
-   - `search_job_validation()` - Validate job postings  
-   - `search_ai_jobs()` - Alternative job search
-   - `infer_company_type()` - Classify companies by size
+The data is stored on `Job.company_enrichment` using the `CompanyEnrichment` model in `src/models.py`.
 
-2. **`test_tavily.py`** (67 lines)
-   - Basic connectivity test
-   - Company enrichment validation
-   - Example usage
+### Configuration
 
-3. **`test_integration.py`** (116 lines)
-   - Full end-to-end integration test
-   - Job -> Enrichment -> Scoring flow
-   - Validation checks
+The current defaults in `config/settings.yaml` are:
 
-4. **`TAVILY_INTEGRATION.md`** (Documentation)
-   - Complete feature guide
-   - Configuration instructions
-   - Usage examples
-   - Troubleshooting
-
-### Modified Files
-1. **`requirements.txt`** - Added `tavily-python>=0.3.0`
-2. **`config/settings.yaml`** - Added Tavily config section
-3. **`src/models.py`** - Added `CompanyEnrichment` model + `tavily` field
-4. **`src/utils/config.py`** - Added `get_tavily_api_key()`
-5. **`src/scoring/engine.py`** - Enhanced `compute_company_signal()` 
-6. **`src/main.py`** - Added Step 4.5 (company enrichment)
-7. **`src/emailer.py`** - Display enrichment in reports
-8. **`README.md`** - Updated with new feature info
-
----
-
-## 🎯 Key Features
-
-### 1. Company Enrichment
-- **Employee count** (200 at Hugging Face, 1000 at Anthropic)
-- **Funding stage** (Series A/B/C/D, Seed)
-- **AI-native detection** (Verified via web search)
-- **Tech stack** (Python, AWS, FastAPI, etc.)
-- **Recent news** (Latest company developments)
-
-### 2. Enhanced Scoring
-Company scores now based on verified data:
-- Startup (<200): **10 points**
-- Mid-size (200-2000): **7 points**
-- Enterprise (2000+): **4 points**
-- AI-native bonus: **+3 points**
-- High rating bonus: **+1 point**
-
-### 3. Better Email Reports
-```
-#1: AI Engineer Intern
-    Company: Anthropic
-    Location: San Francisco (Remote)
-    Score: 87.5/100
-    Company info: 1000 employees, Series D, AI-native ✓
-    Breakdown: Similarity=28, Skills=20, Exp=15, Company=7, Adj=+3
-```
-
-### 4. Production Features
-- **Caching** - Duplicate companies use cached data (0.000s vs 2.28s)
-- **Rate limiting** - 1.5s delay between API calls (friendly to Tavily)
-- **Error handling** - Graceful fallbacks, detailed error messages
-- **Progress tracking** - Clear logs of enrichment status
-
----
-
-## 🔧 Configuration
-
-### API Key (Already Set)
 ```yaml
-# config/settings.yaml
 tavily:
-  api_key: "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"
-  enabled: true
+  api_key: ""              # Prefer TAVILY_API_KEY in .env/environment
+  enabled: false           # Enrichment is disabled by default
   enrich_companies: true
-  max_enrichment_jobs: 30  # Only enrich top N to save API calls
+  max_enrichment_jobs: 4
 ```
 
-### Controls
-- **Enable/disable**: `tavily.enabled: true/false`
-- **Max enrichments**: `max_enrichment_jobs: 30` (adjust for API limits)
-- **Company only**: `enrich_companies: true`
+To enable company enrichment, set `TAVILY_API_KEY` and change `tavily.enabled` to `true`. The key loader checks the environment first and then the YAML setting as a fallback.
 
----
+The repository also uses Tavily for optional job-source scrapers. Those sources have separate configuration sections, such as `tavily_jobs`, `linkedin`, `builtin`, and `simplify`.
 
-## ✅ Test Results
+### Scoring behavior
 
-### Tavily Connection Test
+`src/scoring/engine.py` uses enrichment when available. Company signal is capped at 10 points:
+
+- Fewer than 200 employees: 10 points
+- 200–1,999 employees: 7 points
+- 2,000 or more employees: 4 points
+- AI-company indicator: up to +3 points
+- Seed, Series A, or Series B funding: up to +1 point
+- Glassdoor rating of 4.0 or higher: up to +1 point
+
+If enrichment is unavailable, scoring falls back to the LLM-extracted company type.
+
+### Email reporting
+
+When enrichment is present, `src/emailer.py` includes available employee count, funding stage, AI-company status, and Glassdoor rating in the plain-text report. The score breakdown also includes the company signal.
+
+## Operational details
+
+- Enrichment is limited to the first `max_enrichment_jobs` filtered jobs; the current default is 4.
+- Each company may trigger up to two Tavily searches: company information and technology-stack information.
+- A 1.5-second delay is applied between Tavily API calls.
+- Duplicate company lookups use an in-memory cache during the current pipeline run.
+- The cache is cleared at the start of each pipeline run; there is no persistent or seven-day cache.
+- Tavily failures return empty enrichment data and allow the pipeline to continue.
+- Pipeline logs report progress and the number of API calls made.
+
+## Relevant files
+
+| File | Responsibility |
+|---|---|
+| `requirements.txt` | Includes `tavily-python>=0.3.0` |
+| `config/settings.yaml` | Tavily and scraper configuration |
+| `src/models.py` | `CompanyEnrichment` and job fields |
+| `src/utils/config.py` | Tavily API-key loading |
+| `src/utils/web_search.py` | Client, parsing, rate limiting, and cache |
+| `src/main.py` | Step 4.5 enrichment integration |
+| `src/scoring/engine.py` | Enrichment-aware company scoring |
+| `src/emailer.py` | Enrichment display in reports |
+| `README.md` | Setup and configuration guidance |
+| `TAVILY_INTEGRATION.md` | Detailed integration notes |
+
+## Usage
+
+Install dependencies:
+
 ```bash
-python test_tavily.py
-```
-**Result**: ✅ API connected successfully
-- OpenAI: Partial data retrieved
-- Anthropic: Series D funding detected
-- Hugging Face: 200 employees, AI-native ✓
-
-### Full Integration Test  
-```bash
-python test_integration.py
-```
-**Result**: ✅ All checks passed
-- Job scored: **73.5/100**
-- Company enriched: ✓
-- Company scoring: **7.0/10** (Mid-size company)
-- Why matched: LLM experience, RAG systems, Intern-level fit
-
----
-
-## 🚀 Usage
-
-### Normal Run (Enrichment Enabled)
-```bash
-python -m src.main
-```
-Output includes:
-```
-[STEP 4.5] Enriching companies via web search (30 jobs)...
-  Enriched 5/30 companies
-  Successfully enriched 21/30 companies
+pip install -r requirements.txt
 ```
 
-### Dry Run (Preview)
-```bash
-python -m src.main --dry-run
-```
-See enriched data in terminal preview
+Set the key in `.env` or the environment:
 
-### Disable Enrichment
-Set `tavily.enabled: false` in settings
-
----
-
-## 💰 Cost & Performance
-
-### API Usage
-- ~30 API calls per run (configurable)
-- ~1-2 seconds per company
-- Total: ~30-60 seconds added to pipeline
-
-### Cost Estimate
-- Free tier: 1000 searches/month
-- Developer plan: $0.001/search
-- **Cost per run**: ~$0.03 (30 searches)
-- **Monthly cost**: ~$2.40 (2 runs/week × 4 weeks)
-
-### Benefits
-- **+15-20% scoring accuracy**
-- **Verified company data** vs unreliable descriptions
-- **Better matches** for candidates
-
----
-
-## 📊 Impact Analysis
-
-### Before Integration
-- Company data from job descriptions (unreliable)
-- Startups misclassified as enterprises
-- AI companies not detected
-- Generic scoring
-
-### After Integration
-- **Verified employee counts** (Hugging Face: 200)
-- **Funding stages detected** (Anthropic: Series D)
-- **AI-native confirmation** (web-verified)
-- **Precise scoring** (10 points for startups vs 4 for enterprise)
-
-### Real Example
-```
-Job: "AI Engineer at Acme Corp"
-Before: company_signal = 5 (unknown type)
-After:  company_signal = 10 (verified 150 employees, Series A, AI-native)
-Impact: +5 points = difference between ranked #15 and #8
+```text
+TAVILY_API_KEY=your_tavily_key
 ```
 
----
+Enable enrichment in `config/settings.yaml`, then run:
 
-## 🔍 Next Steps
-
-### Ready to Use
-The integration is **production-ready**:
-1. ✅ API key configured
-2. ✅ Dependencies installed
-3. ✅ Tests passing
-4. ✅ Pipeline integrated
-5. ✅ Documentation complete
-
-### Run Full Pipeline
 ```bash
 python -m src.main
 ```
 
-### Monitor Performance
-Check logs for:
-- `Successfully enriched X/30 companies`
-- Company scoring: Should see values like **7-10 points** for AI startups
+For an email preview without sending:
 
-### Future Enhancements (Optional)
-1. **Job validation** - Check if postings still active
-2. **Salary enrichment** - Fetch from Levels.fyi
-3. **Caching** - Store results for 7 days
-4. **Batch processing** - Multiple companies per API call
-
----
-
-## 📝 Files Changed Summary
-
-| File | Lines Changed | Purpose |
-|------|--------------|---------|
-| `src/utils/web_search.py` | +267 | Core Tavily integration |
-| `src/models.py` | +15 | CompanyEnrichment model |
-| `src/scoring/engine.py` | +35 | Enhanced scoring |
-| `src/main.py` | +25 | Pipeline integration |
-| `src/emailer.py` | +15 | Display enrichment |
-| `config/settings.yaml` | +6 | Tavily config |
-| `requirements.txt` | +1 | Tavily package |
-| **Tests** | +183 | Validation scripts |
-| **Docs** | +250 | Integration guide |
-
-**Total**: ~800 lines of production code + tests + docs
-
----
-
-## ✨ Success Metrics
-
-- ✅ Tavily API working (test passed)
-- ✅ Company enrichment functional (21/30 companies)
-- ✅ Scoring enhanced (company_signal using enrichment)
-- ✅ Email reports upgraded (showing company info)
-- ✅ Configurable (enable/disable, max jobs)
-- ✅ Cost-effective (~$0.03/run)
-- ✅ Well documented (README, integration guide)
-- ✅ Tested (unit + integration tests)
-
----
-
-## 🎉 Ready to Deploy!
-
-Run the full pipeline to see it in action:
 ```bash
 python -m src.main --dry-run
 ```
 
-Check the email preview for enriched company data in the job listings!
+To disable enrichment, leave `tavily.enabled` set to `false`.
 
----
+## Verification status
 
-**Integration Date**: February 2, 2026  
-**API Key**: Configured and tested  
-**Status**: ✅ Production Ready
+The integration is represented in the source code and documentation. No `test_tavily.py` or `test_integration.py` files are currently present in the repository, so historical test-result claims are not included here.
+
+The implementation is best-effort and optional: it can improve ranking when Tavily is enabled and available, while the core pipeline continues using fallback data when it is disabled or unavailable.

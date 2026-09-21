@@ -1,0 +1,50 @@
+product_management:
+  tier: tier1
+  bonus: 6
+  titles:
+    - Product Manager
+    - Associate Product Manager
+    - Product Management Intern
+    - Product Intern
+    - AI Product Manager
+    - AI Product Intern
+    - Technical Product Manager
+    - Technical Product Intern
+solutions:
+  tier: tier1_push
+  bonus: 7
+  titles:
+    - Solutions Engineer
+    - Associate Solutions Engineer
+    - Solutions Engineer Intern
+    - AI Solutions Engineer
+    - GenAI Solutions Engineer
+    - Solutions Consultant
+    - AI Solutions Consultant
+    - Technical Solutions Consultant
+    - AI Solutions Analyst
+product_ops_strategy:
+  tier: tier2
+  bonus: 4
+  titles:
+    - Product Operations
+    - Product Operations Analyst
+    - Product Operations Associate
+    - Product Ops Intern
+    - AI Product Operations
+    - Product Strategy Analyst
+    - Product Strategy Associate
+    - Product Program Manager
+    - Product Program Coordinator
+technical_program:
+  tier: tier2
+  bonus: 4
+  titles:
+    - Technical Program Coordinator
+    - Technical Program Analyst
+    - Associate Technical Program Manager
+    - Technical Program Intern
+    - Technical Project Coordinator
+    - Technical Program Associate
+    - AI Program Coordinator
+    - AI Program Analyst

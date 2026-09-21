@@ -8,7 +8,7 @@ import requests
 from src.models import Job
 
 
-def scrape_remoteok_jobs(max_results: int = 50) -> list[Job]:
+def scrape_remoteok_jobs(max_results: int = 50, requested_tags: list[str] | None = None) -> list[Job]:
     """
     Scrape AI/ML jobs from RemoteOK.
     Uses their public JSON API - no auth required!
@@ -41,6 +41,11 @@ def scrape_remoteok_jobs(max_results: int = 50) -> list[Job]:
                 # Filter for AI/ML jobs
                 tags = item.get('tags', [])
                 position = item.get('position', '').lower()
+                if requested_tags and not any(
+                    any(w.lower() in str(tag).lower() for w in requested_tags)
+                    for tag in (tags if isinstance(tags, list) else []) + [position]
+                ):
+                    continue
                 
                 # Check if AI/ML related
                 ai_keywords = ['ai', 'ml', 'machine learning', 'artificial intelligence', 'deep learning', 'nlp', 'llm']
